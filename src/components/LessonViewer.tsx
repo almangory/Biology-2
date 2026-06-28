@@ -17,7 +17,7 @@ import InteractiveDiagram from './InteractiveDiagram';
 
 // تحديث روابط الصور الافتراضية لتتماشى مع الروح الترابية الدافئة المريحة للعين ومفهوم المنهج
 const LESSON_DEFAULT_IMAGES: Record<string, string> = {
-  u1_l1: 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=800&q=80', // مجموعات الغذاء
+  u1_l1: 'https://drive.google.com/file/d/1z-gXWrH7Bd-1sBhI6SXYUGzdEtCMQOq5/view?usp=sharing', // مجموعات الغذاء
   u1_l2: 'https://images.unsplash.com/photo-1501004318641-72ee04d2a012?auto=format&fit=crop&w=800&q=80', // البناء الضوئي في النبات
   u1_l3: 'https://images.unsplash.com/photo-1576086213369-97a306d36557?auto=format&fit=crop&w=800&q=80', // الهضم في الحيوان
   u2_l1: 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?auto=format&fit=crop&w=800&q=80',
