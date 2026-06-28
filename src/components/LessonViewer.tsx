@@ -295,13 +295,13 @@ const getScientificImageByText = (title: string, contentText: string, lessonId: 
   const combined = (title + ' ' + contentText).toLowerCase();
   
   if (combined.includes('كربوهيدرات') || combined.includes('نشا') || combined.includes('سيلولوز') || combined.includes('جلوكوز') || combined.includes('سكر')) {
-    return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80'; // Carbs / healthy food / grains
+    return 'https://drive.google.com/file/d/1z-gXWrH7Bd-1sBhI6SXYUGzdEtCMQOq5/view?usp=sharing'; // Carbs / healthy food / grains
   }
   if (combined.includes('فيتامين') || combined.includes('فيتامينات') || combined.includes('مضادات الأكسدة')) {
-    return 'https://images.unsplash.com/photo-1616679911721-eff6eec18fcd?auto=format&fit=crop&w=800&q=80'; // Vitamins / colorful citrus fruits
+    return 'https://drive.google.com/open?id=1ach0iNarqARm7XU4mw1S3nI_0Z8-q_SR&usp=drive_fs'; // Vitamins / colorful citrus fruits
   }
   if (combined.includes('بروتين') || combined.includes('لحوم') || combined.includes('أحماض أمينية') || combined.includes('بيض')) {
-    return 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80'; // Protein / raw healthy food ingredients
+    return 'https://drive.google.com/open?id=1WLLMPMEpxk217RPBDKsPbTisFT9ocbOR&usp=drive_fs'; // Protein / raw healthy food ingredients
   }
   if (combined.includes('دهون') || combined.includes('ليبيدات') || combined.includes('زيوت') || combined.includes('زبدة')) {
     return 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=800&q=80'; // Oils / fats / olives / avocado
