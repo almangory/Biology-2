@@ -15,9 +15,35 @@ import {
 import { StudentProgress } from '../types';
 import InteractiveDiagram from './InteractiveDiagram';
 
+// دالة تحويل روابط قوقل درايف لمسارات مباشرة قابلة للعرض بداخل وسوم الـ img لضمان ظهور الصور
+const getDirectGoogleDriveImageUrl = (url: string): string => {
+  if (!url) return '';
+  if (url.includes('drive.google.com')) {
+    let fileId = '';
+    
+    // Pattern 1: /file/d/FILE_ID/view
+    const fileDMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (fileDMatch && fileDMatch[1]) {
+      fileId = fileDMatch[1];
+    } else {
+      // Pattern 2: ?id=FILE_ID
+      const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+      if (idMatch && idMatch[1]) {
+        fileId = idMatch[1];
+      }
+    }
+    
+    if (fileId) {
+      // استخدام رابط استعلام الصور المباشر لضمان التوافق وحل مشكلة عدم التحميل في المتصفحات
+      return `https://lh3.googleusercontent.com/d/${fileId}`;
+    }
+  }
+  return url;
+};
+
 // تحديث روابط الصور الافتراضية لتتماشى مع الروح الترابية الدافئة المريحة للعين ومفهوم المنهج
 const LESSON_DEFAULT_IMAGES: Record<string, string> = {
-  u1_l1: 'https://drive.google.com/file/d/1z-gXWrH7Bd-1sBhI6SXYUGzdEtCMQOq5/view?usp=sharing', // مجموعات الغذاء
+  u1_l1: 'https://drive.google.com/file/d/1WxY6AjlSOmMZzPAG1m8pTA8Us1SgGcCR/view?usp=sharing', // مجموعات الغذاء
   u1_l2: 'https://images.unsplash.com/photo-1501004318641-72ee04d2a012?auto=format&fit=crop&w=800&q=80', // البناء الضوئي في النبات
   u1_l3: 'https://images.unsplash.com/photo-1576086213369-97a306d36557?auto=format&fit=crop&w=800&q=80', // الهضم في الحيوان
   u2_l1: 'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?auto=format&fit=crop&w=800&q=80',
@@ -785,12 +811,12 @@ export default function LessonViewer({
               ) : (
                 <div className="relative h-80 w-full">
                   <img
-                    src={customMediaUrl}
+                    src={getDirectGoogleDriveImageUrl(customMediaUrl)}
                     alt={currentLesson.title}
                     className="w-full h-full object-cover rounded-2xl"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = LESSON_DEFAULT_IMAGES[currentLesson.id] || LESSON_DEFAULT_IMAGES['u1_l1'];
+                      (e.target as HTMLImageElement).src = getDirectGoogleDriveImageUrl(LESSON_DEFAULT_IMAGES[currentLesson.id] || LESSON_DEFAULT_IMAGES['u1_l1']);
                     }}
                   />
                   <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-[#2d2219]/90 via-[#2d2219]/40 to-transparent p-4 text-right">
@@ -802,7 +828,7 @@ export default function LessonViewer({
             ) : (
               <div className="relative h-80 w-full">
                 <img
-                  src={LESSON_DEFAULT_IMAGES[currentLesson.id] || LESSON_DEFAULT_IMAGES['u1_l1']}
+                  src={getDirectGoogleDriveImageUrl(LESSON_DEFAULT_IMAGES[currentLesson.id] || LESSON_DEFAULT_IMAGES['u1_l1'])}
                   alt={currentLesson.title}
                   className="w-full h-full object-cover rounded-2xl saturate-[1.02]"
                   referrerPolicy="no-referrer"
@@ -954,7 +980,7 @@ export default function LessonViewer({
                           >
                             <div className="relative rounded-xl overflow-hidden shadow-xs border border-[#eaddca]/80 aspect-video w-full lg:h-[260px] lg:w-full bg-slate-900 group shrink-0">
                               <img
-                                src={activeSlideImg}
+                                src={getDirectGoogleDriveImageUrl(activeSlideImg)}
                                 alt={currentSlide?.title}
                                 className="w-full h-full object-cover saturate-[1.05] group-hover:scale-105 transition-transform duration-500"
                                 referrerPolicy="no-referrer"
@@ -1592,7 +1618,7 @@ export default function LessonViewer({
                         >
                           <div className="relative rounded-2xl overflow-hidden shadow-md border border-[#eaddca] w-full max-w-2xl h-full max-h-[45vh] lg:max-h-[380px] bg-slate-900 group shrink-0">
                             <img
-                              src={activeSlideImg}
+                              src={getDirectGoogleDriveImageUrl(activeSlideImg)}
                               alt={currentSlide?.title}
                               className="w-full h-full object-cover saturate-[1.05]"
                               referrerPolicy="no-referrer"
