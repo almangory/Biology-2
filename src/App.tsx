@@ -11,10 +11,13 @@ import VirtualLab from './components/VirtualLab';
 import WorksheetsSection from './components/WorksheetsSection';
 import ExamsSection from './components/ExamsSection';
 import ReviewReminders from './components/ReviewReminders';
+import SmartResearcher from './components/SmartResearcher';
+import BiologyGlossary from './components/BiologyGlossary';
+import StudentAssistantBot from './components/StudentAssistantBot';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   LayoutDashboard, BookOpen, Beaker, FileText, ClipboardCheck, 
-  Activity, GraduationCap, Eye, EyeOff, Search, Sun, Moon
+  Activity, GraduationCap, Eye, EyeOff, Search, Sun, Moon, Book
 } from 'lucide-react';
 import { performCurriculumSearch, SearchResult } from './utils/search';
 import { CURRICULUM } from './data/curriculum';
@@ -41,7 +44,7 @@ export default function App() {
   // Sub-modes for the 3 simplified Tracks
   const [learningMode, setLearningMode] = useState<'theory' | 'lab'>('theory');
   const [evaluationMode, setEvaluationMode] = useState<'exams' | 'worksheets'>('exams');
-  const [adminMode, setAdminMode] = useState<'dashboard' | 'reminders'>('dashboard');
+  const [adminMode, setAdminMode] = useState<'dashboard' | 'reminders' | 'researcher'>('dashboard');
 
   // Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -398,7 +401,7 @@ export default function App() {
                 <h3 className={`text-xs font-black ${isDarkMode ? 'text-white' : 'text-[#2d2219]'}`}>المسارات التعليمية</h3>
               </div>
 
-              <nav className="flex flex-col gap-2 sm:grid sm:grid-cols-2 lg:flex lg:flex-col" id="navigation-tabs">
+              <nav className="flex flex-col gap-2 sm:grid sm:grid-cols-3 lg:flex lg:flex-col" id="navigation-tabs">
                 {/* PILAR 1: مساحة التعلم والعمل العميق */}
                 <button
                   onClick={() => {
@@ -442,6 +445,28 @@ export default function App() {
                   <div className="flex-1 mr-2">
                     <span className="block">التقييم الشامل</span>
                     <span className="text-[9px] text-[#a6937c] font-bold block">الامتحانات والتدريب</span>
+                  </div>
+                </button>
+
+                {/* PILAR 3: القاموس التفاعلي للمصطلحات */}
+                <button
+                  onClick={() => {
+                    handleTabChange('glossary');
+                  }}
+                  className={`flex items-center justify-between py-3 px-3.5 rounded-xl text-xs font-black transition-all text-right ${
+                    activeTab === 'glossary'
+                      ? isDarkMode 
+                        ? 'bg-[#212733] text-amber-400 border border-[#2e3747] shadow-3xs' 
+                        : 'bg-[#ebdcb9]/30 text-amber-900 border border-[#ebdcb9] shadow-3xs'
+                      : isDarkMode 
+                        ? 'text-[#baa896] hover:text-white hover:bg-[#22221e]' 
+                        : 'text-[#7c6a59] hover:text-[#2d2219] hover:bg-[#fcfaf4]'
+                  }`}
+                >
+                  <Book className={`w-4 h-4 ${isDarkMode ? 'text-amber-400' : 'text-[#c86446]'} shrink-0`} />
+                  <div className="flex-1 mr-2">
+                    <span className="block">القاموس التفاعلي</span>
+                    <span className="text-[9px] text-[#a6937c] font-bold block">أطلس المصطلحات</span>
                   </div>
                 </button>
               </nav>
@@ -518,11 +543,13 @@ export default function App() {
                 {activeTab === 'dashboard' && 'الإدارة والتشخيص المستمر'}
                 {activeTab === 'lessons' && 'مساحة التعلم الذاتي والعمل العميق'}
                 {activeTab === 'exams' && 'التقييم الشامل والتدريب التفاعلي'}
+                {activeTab === 'glossary' && 'الموسوعة اللغوية والقاموس'}
               </div>
               <h2 className={`text-sm sm:text-base font-extrabold ${isDarkMode ? 'text-white' : 'text-[#2d2219]'} flex items-center space-x-2 space-x-reverse`}>
                 <span>{activeTab === 'dashboard' && 'لوحة القيادة والمساعد الذكي'}</span>
                 <span>{activeTab === 'lessons' && 'مساحة التعلم (الوحدات والمعامل)'}</span>
                 <span>{activeTab === 'exams' && 'ساحة التقييم والتمكين الأكاديمي'}</span>
+                <span>{activeTab === 'glossary' && 'قاموس المصطلحات والمفاهيم'}</span>
               </h2>
             </div>
           )}
@@ -533,7 +560,7 @@ export default function App() {
             {/* PILAR 1: ADMINISTRATION HUB */}
             {activeTab === 'dashboard' && (
               <div className="space-y-6">
-                <div className={`flex ${isDarkMode ? 'bg-[#292924] border-[#3a3a35]' : 'bg-[#f6f1e5] border-[#eaddca]'} p-1 rounded-xl border max-w-xs ml-auto`}>
+                <div className={`flex ${isDarkMode ? 'bg-[#292924] border-[#3a3a35]' : 'bg-[#f6f1e5] border-[#eaddca]'} p-1 rounded-xl border max-w-sm ml-auto`}>
                   <button
                     onClick={() => setAdminMode('dashboard')}
                     className={`flex-1 py-1.5 px-3 rounded-lg text-[11px] font-black transition-all ${
@@ -543,6 +570,16 @@ export default function App() {
                     }`}
                   >
                     إحصائيات التحصيل
+                  </button>
+                  <button
+                    onClick={() => setAdminMode('researcher')}
+                    className={`flex-1 py-1.5 px-3 rounded-lg text-[11px] font-black transition-all ${
+                      adminMode === 'researcher'
+                        ? isDarkMode ? 'bg-[#1a1a17] text-[#459b6d] shadow-3xs' : 'bg-white text-[#1e4631] shadow-3xs'
+                        : `text-[#baa896] hover:text-${isDarkMode ? 'white' : '[#2d2219]'}`
+                    }`}
+                  >
+                    الباحث الذكي 🧬
                   </button>
                   <button
                     onClick={() => setAdminMode('reminders')}
@@ -559,7 +596,7 @@ export default function App() {
                   </button>
                 </div>
 
-                {adminMode === 'dashboard' ? (
+                {adminMode === 'dashboard' && (
                   <Dashboard 
                     progress={progress} 
                     reminders={reminders} 
@@ -598,7 +635,34 @@ export default function App() {
                       }
                     }} 
                   />
-                ) : (
+                )}
+
+                {adminMode === 'researcher' && (
+                  <SmartResearcher 
+                    onNavigateToSection={(tabId, extraId) => {
+                      if (tabId === 'lessons') {
+                        if (extraId) {
+                          setCurrentLessonId(extraId);
+                          const foundUnit = CURRICULUM.find(u => u.lessons.some(l => l.id === extraId));
+                          if (foundUnit) {
+                            setCurrentUnitId(foundUnit.id);
+                          }
+                        }
+                        setLearningMode('theory');
+                        handleTabChange('lessons');
+                      } else if (tabId === 'labs') {
+                        if (extraId) {
+                          setPreselectedLabId(extraId);
+                        }
+                        setLearningMode('lab');
+                        handleTabChange('lessons');
+                      }
+                    }}
+                    isDarkMode={isDarkMode}
+                  />
+                )}
+
+                {adminMode === 'reminders' && (
                   <ReviewReminders 
                     reminders={reminders}
                     onAddReminder={handleAddReminder}
@@ -721,6 +785,34 @@ export default function App() {
               </div>
             )}
 
+            {/* PILAR 4: GLOSSARY HUB */}
+            {activeTab === 'glossary' && (
+              <div className="space-y-6 animate-fadeIn">
+                <BiologyGlossary 
+                  onNavigateToSection={(tabId, extraId) => {
+                    if (tabId === 'lessons') {
+                      if (extraId) {
+                        setCurrentLessonId(extraId);
+                        const foundUnit = CURRICULUM.find(u => u.lessons.some(l => l.id === extraId));
+                        if (foundUnit) {
+                          setCurrentUnitId(foundUnit.id);
+                        }
+                      }
+                      setLearningMode('theory');
+                      handleTabChange('lessons');
+                    } else if (tabId === 'labs') {
+                      if (extraId) {
+                        setPreselectedLabId(extraId);
+                      }
+                      setLearningMode('lab');
+                      handleTabChange('lessons');
+                    }
+                  }}
+                  isDarkMode={isDarkMode}
+                />
+              </div>
+            )}
+
           </div>
         </div>
       </div>
@@ -732,6 +824,30 @@ export default function App() {
         <p className={`font-semibold ${isDarkMode ? 'text-white' : 'text-[#2d2219]'}`}>المنصة التعليمية لطلاب الشهادة الثانوية السودانية - دراسة آمنة ومنظمة بلا مشتتات.</p>
         <p className="mt-1 font-mono text-[#a6937c]">حقوق المنهج محفوظة لوزارة التربية والتعليم بخت الرضا - جمهورية السودان.</p>
       </footer>
+
+      {/* المساعد الذكي العائم للطالب */}
+      <StudentAssistantBot 
+        onNavigateToSection={(tabId, extraId) => {
+          if (tabId === 'lessons') {
+            if (extraId) {
+              setCurrentLessonId(extraId);
+              const foundUnit = CURRICULUM.find(u => u.lessons.some(l => l.id === extraId));
+              if (foundUnit) {
+                setCurrentUnitId(foundUnit.id);
+              }
+            }
+            setLearningMode('theory');
+            handleTabChange('lessons');
+          } else if (tabId === 'labs') {
+            if (extraId) {
+              setPreselectedLabId(extraId);
+            }
+            setLearningMode('lab');
+            handleTabChange('lessons');
+          }
+        }}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 }

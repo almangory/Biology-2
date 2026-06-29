@@ -10,7 +10,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   BookOpen, Bookmark, CheckCircle, Bell, ChevronLeft, ChevronRight, 
   ChevronDown, ChevronUp, Image, Settings, Beaker, ArrowLeft, 
-  RotateCcw, Activity, Info, AlertCircle, Maximize2, Minimize2
+  RotateCcw, Activity, Info, AlertCircle, Maximize2, Minimize2,
+  Download, Printer, FileText
 } from 'lucide-react';
 import { StudentProgress } from '../types';
 import InteractiveDiagram from './InteractiveDiagram';
@@ -345,9 +346,9 @@ const getScientificImageByText = (title: string, contentText: string, lessonId: 
   
   const hash = title.length % 5;
   const fallbacks = [
-    'https://images.unsplash.com/photo-1532187863486-abf9d39d66e8?auto=format&fit=crop&w=800&q=80', // Lab
+    'https://drive.google.com/open?id=1VgctY6DNRiIQZg-TFSMRm52MS2HSQjF7&usp=drive_fs', // Lab
     'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=800&q=80', // Abstract science / bio
-    'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=800&q=80', // DNA helix
+    'https://drive.google.com/open?id=1WLLMPMEpxk217RPBDKsPbTisFT9ocbOR&usp=drive_fs', // DNA helix
     'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80', // digital biology
     'https://images.unsplash.com/photo-1501004318641-72ee04d2a012?auto=format&fit=crop&w=800&q=80'  // Green leaves / plant
   ];
@@ -371,6 +372,7 @@ export default function LessonViewer({
   const [activeCardIdx, setActiveCardIdx] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [showSchedulePopup, setShowSchedulePopup] = useState(false);
+  const [showExportPopup, setShowExportPopup] = useState(false);
   const [scheduleDays, setScheduleDays] = useState(3);
   const [customMediaUrl, setCustomMediaUrl] = useState('');
   const [tempMediaUrl, setTempMediaUrl] = useState('');
@@ -457,6 +459,494 @@ export default function LessonViewer({
         : [...currentList, currentLesson.id];
       return { ...prev, completedLessonIds: updated };
     });
+  };
+
+  const generateLessonTextSummary = (lesson: any, unitTitle: string): string => {
+    let text = `=========================================\n`;
+    text += `جمهورية السودان - المنهج الأكاديمي للأحياء\n`;
+    text += `ملخص الدرس للمراجعة والتحصيل\n`;
+    text += `=========================================\n\n`;
+    text += `📖 الوحدة: ${unitTitle}\n`;
+    text += `🔖 الدرس: ${lesson.title}\n`;
+    if (lesson.subTitle) {
+      text += `💡 العنوان الفرعي: ${lesson.subTitle}\n`;
+    }
+    text += `\n-----------------------------------------\n`;
+    text += `📝 محتوى الدرس الأساسي:\n`;
+    text += `-----------------------------------------\n\n`;
+    
+    const cleanContent = lesson.content
+      .replace(/###/g, '◀')
+      .replace(/##/g, '■')
+      .replace(/#/g, '●')
+      .replace(/\*\*/g, '')
+      .replace(/\*/g, '•');
+      
+    text += cleanContent;
+    text += `\n\n-----------------------------------------\n`;
+    text += `🌟 النقاط الأساسية والمفاهيم الجوهرية (Key Takeaways):\n`;
+    text += `-----------------------------------------\n`;
+    if (lesson.keyTakeaways && lesson.keyTakeaways.length > 0) {
+      lesson.keyTakeaways.forEach((point: string, idx: number) => {
+        text += `${idx + 1}. ${point}\n`;
+      });
+    } else {
+      text += `لا توجد نقاط أساسية إضافية مضافة.\n`;
+    }
+
+    if (lesson.healthTips && lesson.healthTips.length > 0) {
+      text += `\n-----------------------------------------\n`;
+      text += `🔬 ملاحظات صحية وتطبيقات سودانية للمنهج:\n`;
+      text += `-----------------------------------------\n`;
+      lesson.healthTips.forEach((tip: string, idx: number) => {
+        text += `💡 ${tip}\n`;
+      });
+    }
+
+    if (lesson.flashcards && lesson.flashcards.length > 0) {
+      text += `\n-----------------------------------------\n`;
+      text += `🧠 بطاقات الأسئلة والأجوبة السريعة (Flashcards):\n`;
+      text += `-----------------------------------------\n`;
+      lesson.flashcards.forEach((card: any, idx: number) => {
+        text += `س${idx + 1}: ${card.question}\n`;
+        text += `ج${idx + 1}: ${card.answer}\n\n`;
+      });
+    }
+
+    text += `\n=========================================\n`;
+    text += `تاريخ التصدير: ${new Date().toLocaleDateString('ar-SD', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n`;
+    text += `تم التصدير بواسطة منصة الأحياء التفاعلية للسودان ✨\n`;
+    text += `=========================================\n`;
+
+    return text;
+  };
+
+  const generateUnitTextSummary = (unit: any): string => {
+    let text = `=========================================\n`;
+    text += `جمهورية السودان - المنهج الأكاديمي للأحياء\n`;
+    text += `ملخص الوحدة الأكاديمية بالكامل للمراجعة\n`;
+    text += `=========================================\n\n`;
+    text += `📂 الوحدة: ${unit.title} (${unit.englishTitle})\n`;
+    text += `📝 الوصف: ${unit.description}\n`;
+    text += `\n=========================================\n\n`;
+
+    unit.lessons.forEach((lesson: any, lessonIdx: number) => {
+      text += `【 الدرس ${lessonIdx + 1}: ${lesson.title} 】\n`;
+      if (lesson.subTitle) {
+        text += `💡 ${lesson.subTitle}\n`;
+      }
+      text += `\n`;
+      
+      const cleanContent = lesson.content
+        .replace(/###/g, '◀')
+        .replace(/##/g, '■')
+        .replace(/#/g, '●')
+        .replace(/\*\*/g, '')
+        .replace(/\*/g, '•');
+        
+      text += cleanContent;
+      text += `\n\n• النقاط الأساسية:\n`;
+      lesson.keyTakeaways.forEach((point: string, idx: number) => {
+        text += `  - ${point}\n`;
+      });
+
+      if (lesson.healthTips && lesson.healthTips.length > 0) {
+        text += `\n• ملاحظات وتطبيقات المنهج:\n`;
+        lesson.healthTips.forEach((tip: string, idx: number) => {
+          text += `  💡 ${tip}\n`;
+        });
+      }
+
+      if (lesson.flashcards && lesson.flashcards.length > 0) {
+        text += `\n• بطاقات الأسئلة السريعة:\n`;
+        lesson.flashcards.forEach((card: any, idx: number) => {
+          text += `  س: ${card.question}\n`;
+          text += `  ج: ${card.answer}\n`;
+        });
+      }
+
+      text += `\n-----------------------------------------\n\n`;
+    });
+
+    text += `=========================================\n`;
+    text += `تاريخ التصدير: ${new Date().toLocaleDateString('ar-SD', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n`;
+    text += `تم التصدير بواسطة منصة الأحياء التفاعلية للسودان ✨\n`;
+    text += `=========================================\n`;
+
+    return text;
+  };
+
+  const handleDownloadTxt = (type: 'lesson' | 'unit') => {
+    const text = type === 'lesson' 
+      ? generateLessonTextSummary(currentLesson, currentUnit.title)
+      : generateUnitTextSummary(currentUnit);
+      
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = type === 'lesson' 
+      ? `ملخص_درس_${currentLesson.title.replace(/\s+/g, '_')}.txt`
+      : `ملخص_وحدة_${currentUnit.title.replace(/\s+/g, '_')}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintPDF = (type: 'lesson' | 'unit') => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('الرجاء السماح بالنوافذ المنبثقة لتتمكن من طباعة وتصدير الملف.');
+      return;
+    }
+
+    let htmlContent = '';
+    const dateStr = new Date().toLocaleDateString('ar-SD', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    if (type === 'lesson') {
+      const takeawaysList = currentLesson.keyTakeaways.map(point => `<li>${point}</li>`).join('');
+      const healthTipsList = (currentLesson.healthTips || []).map(tip => `<li>💡 ${tip}</li>`).join('');
+      const flashcardsList = (currentLesson.flashcards || []).map((card, idx) => `
+        <div class="card-item">
+          <p class="question"><strong>س${idx + 1}:</strong> ${card.question}</p>
+          <p class="answer"><strong>ج${idx + 1}:</strong> ${card.answer}</p>
+        </div>
+      `).join('');
+
+      const cleanMarkdown = currentLesson.content
+        .replace(/### (.*)/g, '<h3>$1</h3>')
+        .replace(/## (.*)/g, '<h2>$1</h2>')
+        .replace(/# (.*)/g, '<h1>$1</h1>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
+
+      htmlContent = `
+        <div class="print-container">
+          <div class="header">
+            <div class="header-logo">🧬</div>
+            <div class="header-title">
+              <h1>وزارة التربية والتعليم - جمهورية السودان</h1>
+              <h2>منصة الأحياء التفاعلية للصف الثاني الثانوي</h2>
+              <h3>ملخص المراجعة والتحصيل الأكاديمي</h3>
+            </div>
+          </div>
+
+          <div class="meta-section">
+            <p><strong>الوحدة:</strong> ${currentUnit.title}</p>
+            <p><strong>الدرس:</strong> ${currentLesson.title}</p>
+            ${currentLesson.subTitle ? `<p><strong>العنوان الفرعي:</strong> ${currentLesson.subTitle}</p>` : ''}
+            <p><strong>تاريخ التصدير:</strong> ${dateStr}</p>
+          </div>
+
+          <div class="content-section">
+            <h2>📝 محتوى الشرح والتفصيل:</h2>
+            <div class="markdown-body">
+              ${cleanMarkdown}
+            </div>
+          </div>
+
+          <div class="takeaways-section">
+            <h2>🌟 النقاط والمفاهيم الأساسية (مهم للامتحان):</h2>
+            <ul>
+              ${takeawaysList}
+            </ul>
+          </div>
+
+          ${currentLesson.healthTips && currentLesson.healthTips.length > 0 ? `
+          <div class="health-tips-section">
+            <h2>🔬 تطبيقات المنهج والملاحظات الطبية:</h2>
+            <ul>
+              ${healthTipsList}
+            </ul>
+          </div>
+          ` : ''}
+
+          ${currentLesson.flashcards && currentLesson.flashcards.length > 0 ? `
+          <div class="flashcards-section">
+            <h2>🧠 بطاقات المراجعة السريعة (سؤال وجواب):</h2>
+            <div class="cards-grid">
+              ${flashcardsList}
+            </div>
+          </div>
+          ` : ''}
+
+          <div class="footer">
+            <p>مع تمنياتنا لكم بالنجاح والتفوق الباهر في امتحانات الشهادة السودانية ✨</p>
+          </div>
+        </div>
+      `;
+    } else {
+      // Unit PDF export
+      const lessonsHtml = currentUnit.lessons.map((lesson, lessonIdx) => {
+        const cleanContent = lesson.content
+          .replace(/### (.*)/g, '<h3>$1</h3>')
+          .replace(/## (.*)/g, '<h2>$1</h2>')
+          .replace(/# (.*)/g, '<h1>$1</h1>')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\n/g, '<br>');
+
+        const keyTakeawaysList = lesson.keyTakeaways.map(point => `<li>${point}</li>`).join('');
+        const healthTipsList = (lesson.healthTips || []).map(tip => `<li>💡 ${tip}</li>`).join('');
+        const flashcardsList = (lesson.flashcards || []).map((card, idx) => `
+          <div class="card-item">
+            <p class="question"><strong>س${idx + 1}:</strong> ${card.question}</p>
+            <p class="answer"><strong>ج${idx + 1}:</strong> ${card.answer}</p>
+          </div>
+        `).join('');
+
+        return `
+          <div class="unit-lesson-block">
+            <h2 class="lesson-num">📖 الدرس ${lessonIdx + 1}: ${lesson.title}</h2>
+            ${lesson.subTitle ? `<p class="lesson-sub">💡 ${lesson.subTitle}</p>` : ''}
+            
+            <div class="markdown-body">
+              ${cleanContent}
+            </div>
+
+            <div class="takeaways-section inner-takeaways">
+              <h3>🌟 النقاط الأساسية للدرس:</h3>
+              <ul>
+                ${keyTakeawaysList}
+              </ul>
+            </div>
+
+            ${lesson.healthTips && lesson.healthTips.length > 0 ? `
+            <div class="health-tips-section inner-health">
+              <h3>🔬 تطبيقات المنهج والملاحظات الطبية:</h3>
+              <ul>
+                ${healthTipsList}
+              </ul>
+            </div>
+            ` : ''}
+
+            ${lesson.flashcards && lesson.flashcards.length > 0 ? `
+            <div class="flashcards-section inner-flash">
+              <h3>🧠 بطاقات الأسئلة السريعة:</h3>
+              <div class="cards-grid">
+                ${flashcardsList}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+          <div class="page-break"></div>
+        `;
+      }).join('');
+
+      htmlContent = `
+        <div class="print-container">
+          <div class="header">
+            <div class="header-logo">🧬</div>
+            <div class="header-title">
+              <h1>وزارة التربية والتعليم - جمهورية السودان</h1>
+              <h2>منصة الأحياء التفاعلية للصف الثاني الثانوي</h2>
+              <h3>ملخص الوحدة الأكاديمية الكامل للمراجعة الخارجية</h3>
+            </div>
+          </div>
+
+          <div class="meta-section">
+            <p><strong>📂 الوحدة الكاملة:</strong> ${currentUnit.title}</p>
+            <p><strong>📝 الوصف العام:</strong> ${currentUnit.description}</p>
+            <p><strong>تاريخ التصدير:</strong> ${dateStr}</p>
+          </div>
+
+          ${lessonsHtml}
+
+          <div class="footer">
+            <p>تم إعداد وتصدير هذا الملف للمراجعة الذاتية • تمنياتنا بالتوفيق والتفوق ✨</p>
+          </div>
+        </div>
+      `;
+    }
+
+    const printStyles = `
+      @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+      
+      body {
+        font-family: 'Cairo', system-ui, -apple-system, sans-serif;
+        background-color: #ffffff;
+        color: #2d2219;
+        margin: 0;
+        padding: 20px;
+        line-height: 1.6;
+      }
+
+      .print-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        border: 1px solid #ebdcb9;
+        background-color: #fdfcf9;
+        border-radius: 12px;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-bottom: 3px double #c86446;
+        padding-bottom: 15px;
+        margin-bottom: 25px;
+        gap: 20px;
+      }
+
+      .header-logo {
+        font-size: 48px;
+      }
+
+      .header-title {
+        text-align: center;
+      }
+
+      .header-title h1 {
+        font-size: 18px;
+        margin: 0 0 5px 0;
+        color: #1e4631;
+        font-weight: 900;
+      }
+
+      .header-title h2 {
+        font-size: 14px;
+        margin: 0 0 5px 0;
+        color: #c86446;
+        font-weight: 700;
+      }
+
+      .header-title h3 {
+        font-size: 12px;
+        margin: 0;
+        color: #7c6a59;
+        font-weight: 600;
+      }
+
+      .meta-section {
+        background-color: #f6f1e5;
+        border: 1px solid #eaddca;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 25px;
+        font-size: 13px;
+      }
+
+      .meta-section p {
+        margin: 4px 0;
+      }
+
+      .content-section, .takeaways-section, .health-tips-section, .flashcards-section, .unit-lesson-block {
+        margin-bottom: 30px;
+      }
+
+      h2 {
+        font-size: 15px;
+        color: #1e4631;
+        border-bottom: 1px solid #eaddca;
+        padding-bottom: 6px;
+        margin-bottom: 12px;
+        font-weight: 700;
+      }
+
+      h3 {
+        font-size: 14px;
+        color: #c86446;
+        margin: 15px 0 8px 0;
+      }
+
+      .markdown-body {
+        font-size: 13px;
+        color: #4a3e3d;
+        line-height: 1.7;
+      }
+
+      ul {
+        padding-right: 20px;
+        margin: 10px 0;
+      }
+
+      li {
+        font-size: 13px;
+        margin-bottom: 6px;
+        position: relative;
+      }
+
+      .cards-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 15px;
+        margin-top: 15px;
+      }
+
+      .card-item {
+        background-color: #ffffff;
+        border: 1px solid #eaddca;
+        padding: 12px;
+        border-radius: 8px;
+      }
+
+      .card-item p {
+        margin: 4px 0;
+        font-size: 12px;
+      }
+
+      .card-item .question {
+        color: #c86446;
+      }
+
+      .card-item .answer {
+        color: #1e4631;
+      }
+
+      .unit-lesson-block {
+        border-bottom: 2px dashed #eaddca;
+        padding-bottom: 25px;
+        margin-bottom: 25px;
+      }
+
+      .lesson-num {
+        font-size: 16px;
+        color: #1e4631;
+        border-bottom: 2px solid #1e4631;
+        padding-bottom: 4px;
+      }
+
+      .lesson-sub {
+        font-size: 12px;
+        color: #7c6a59;
+        font-style: italic;
+        margin-top: -8px;
+        margin-bottom: 15px;
+      }
+
+      .footer {
+        text-align: center;
+        font-size: 11px;
+        color: #baa896;
+        border-top: 1px dashed #eaddca;
+        padding-top: 15px;
+        margin-top: 30px;
+      }
+
+      @media print {
+        body {
+          background-color: #ffffff;
+          padding: 0;
+        }
+        .print-container {
+          border: none;
+          background-color: transparent;
+          padding: 0;
+          max-width: 100%;
+        }
+        .page-break {
+          page-break-after: always;
+        }
+        button {
+          display: none !important;
+        }
+      }
+    `;
+
+    printWindow.document.write('<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>تصدير ملخص الأحياء</title><style>' + printStyles + '</style></head><body>' + htmlContent + '<script>window.onload = function() { setTimeout(function() { window.print(); }, 300); };</script></body></html>');
+    printWindow.document.close();
   };
 
   const toggleUnitExpand = (unitId: string) => {
@@ -655,11 +1145,30 @@ export default function LessonViewer({
 
             {/* زر منبه المراجعة والتكرار المتباعد بلون التراكوتا الفخاري */}
             <button
-              onClick={() => setShowSchedulePopup(!showSchedulePopup)}
+              onClick={() => {
+                setShowSchedulePopup(!showSchedulePopup);
+                setShowExportPopup(false);
+              }}
               className="flex items-center space-x-1.5 space-x-reverse py-1.5 px-3.5 rounded-xl border bg-white text-[#7c6a59] border-[#eaddca] hover:text-[#2d2219] hover:bg-[#fcfaf4] text-xs font-bold transition-all relative shadow-3xs"
             >
               <Bell className="w-4 h-4 text-[#c86446] ml-1.5" />
               <span>مراجعة دورية</span>
+            </button>
+
+            {/* زر تصدير وتنزيل ملخص الدرس والوحدة */}
+            <button
+              onClick={() => {
+                setShowExportPopup(!showExportPopup);
+                setShowSchedulePopup(false);
+              }}
+              className={`flex items-center space-x-1.5 space-x-reverse py-1.5 px-3.5 rounded-xl border text-xs font-bold transition-all shadow-3xs relative ${
+                showExportPopup
+                  ? 'bg-[#1e4631] text-white border-[#1e4631]'
+                  : 'bg-white text-[#7c6a59] border-[#eaddca] hover:text-[#2d2219] hover:bg-[#fcfaf4]'
+              }`}
+            >
+              <Download className={`w-4 h-4 ml-1.5 ${showExportPopup ? 'text-white' : 'text-emerald-600'}`} />
+              <span>تصدير الملخص 📥</span>
             </button>
           </div>
 
@@ -713,6 +1222,95 @@ export default function LessonViewer({
                 >
                   حفظ وضبط منبه الجدولة
                 </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* نافذة تصدير وتنزيل الملخصات الدراسية */}
+        <AnimatePresence>
+          {showExportPopup && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="bg-[#f6f1e5] border border-[#ebdcb9] p-5 rounded-2xl space-y-4 shadow-sm"
+              id="lesson-exporter-popup"
+            >
+              <div className="flex justify-between items-center text-xs font-bold border-b border-[#eaddca] pb-2">
+                <span className="text-[#7c6a59]">اختر نطاق وصيغة التصدير المناسبة للمراجعة الخارجية:</span>
+                <h5 className="text-[#1e4631] flex items-center space-x-1.5 space-x-reverse font-black">
+                  <Download className="w-4 h-4 text-emerald-600" />
+                  <span>تصدير الملخص الأكاديمي</span>
+                </h5>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* القسم الأول: الدرس الحالي */}
+                <div className="bg-white border border-[#eaddca] p-3 rounded-xl space-y-3">
+                  <h6 className="text-xs font-black text-[#1e4631] flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    <span>الدرس الحالي فقط ({currentLesson.title})</span>
+                  </h6>
+                  <p className="text-[10px] text-[#7c6a59] font-medium leading-relaxed">
+                    تصدير تفاصيل الدرس الحالي من الشروحات، النقاط الهامة، الملاحظات الطبية، والبطاقات التعليمية.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        handleDownloadTxt('lesson');
+                        setShowExportPopup(false);
+                      }}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-[#ebdcb9]/40 hover:bg-[#ebdcb9]/80 border border-[#ebdcb9] text-[#7c6a59] hover:text-[#2d2219] font-bold text-[11px] transition-all"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>ملف نصي (.txt)</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handlePrintPDF('lesson');
+                        setShowExportPopup(false);
+                      }}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-bold text-[11px] transition-all"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>طباعة / PDF 🖨️</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* القسم الثاني: الوحدة بالكامل */}
+                <div className="bg-white border border-[#eaddca] p-3 rounded-xl space-y-3">
+                  <h6 className="text-xs font-black text-[#c86446] flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#c86446]"></span>
+                    <span>الوحدة الدراسية بالكامل ({currentUnit.title})</span>
+                  </h6>
+                  <p className="text-[10px] text-[#7c6a59] font-medium leading-relaxed">
+                    تصدير كتابي شامل لجميع الدروس المندرجة تحت هذه الوحدة في ملف واحد منسق ومهيأ للمراجعة السريعة.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        handleDownloadTxt('unit');
+                        setShowExportPopup(false);
+                      }}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-[#ebdcb9]/40 hover:bg-[#ebdcb9]/80 border border-[#ebdcb9] text-[#7c6a59] hover:text-[#2d2219] font-bold text-[11px] transition-all"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>ملف نصي (.txt)</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handlePrintPDF('unit');
+                        setShowExportPopup(false);
+                      }}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-[#c86446]/10 hover:bg-[#c86446]/20 border border-[#c86446]/20 text-[#c86446] font-bold text-[11px] transition-all"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>طباعة / PDF 🖨️</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
