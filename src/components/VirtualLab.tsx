@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { VIRTUAL_LABS } from '../data/labs';
+import { LAB_LESSONS } from '../data/lessonsData';
 import { motion, AnimatePresence } from 'motion/react';
 import { Beaker, Settings, Play, RefreshCw, CheckCircle, Info, Star, Maximize2, Minimize2, Search, BookOpen, Layers } from 'lucide-react';
 import { StudentProgress } from '../types';
@@ -138,6 +139,73 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
   const [isRunning, setIsRunning] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
 
+  // Tab control state: 'simulation' or 'lesson'
+  const [activeLabTab, setActiveLabTab] = useState<'simulation' | 'lesson'>('simulation');
+
+  // Interactive Quiz states
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
+  const [submittedQuestions, setSubmittedQuestions] = useState<Record<string, boolean>>({});
+
+  // 3D Holographic Viewport State
+  const [is3DMode, setIs3DMode] = useState(true); // Default to true to show off the cool new feature
+  const [rotX, setRotX] = useState(12); // vertical tilt in degrees (default 12 for an elegant isometric pitch)
+  const [rotY, setRotY] = useState(-15); // horizontal rotation in degrees (default -15 for dynamic angular depth)
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [dragAngles, setDragAngles] = useState({ x: 12, y: -15 });
+
+  // Mouse drag handlers for direct immersive 3D rotation
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!is3DMode) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
+    setDragAngles({ x: rotX, y: rotY });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !is3DMode) return;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    
+    // Smooth angle update based on movement
+    let newRotY = dragAngles.y + dx * 0.45;
+    let newRotX = dragAngles.x - dy * 0.45;
+    
+    // Clamp values to preserve high aesthetic range
+    newRotX = Math.max(-28, Math.min(32, newRotX));
+    newRotY = Math.max(-55, Math.min(55, newRotY));
+    
+    setRotX(newRotX);
+    setRotY(newRotY);
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setIsDragging(false);
+  };
+
+  // Touch handlers for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!is3DMode || e.touches.length === 0) return;
+    setIsDragging(true);
+    setDragStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    setDragAngles({ x: rotX, y: rotY });
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || !is3DMode || e.touches.length === 0) return;
+    const dx = e.touches[0].clientX - dragStart.x;
+    const dy = e.touches[0].clientY - dragStart.y;
+    
+    let newRotY = dragAngles.y + dx * 0.45;
+    let newRotX = dragAngles.x - dy * 0.45;
+    
+    newRotX = Math.max(-28, Math.min(32, newRotX));
+    newRotY = Math.max(-55, Math.min(55, newRotY));
+    
+    setRotX(newRotX);
+    setRotY(newRotY);
+  };
+
   // Responsive dimensions state for dynamic scaling
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
   const [windowHeight, setWindowHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 800);
@@ -153,12 +221,12 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
 
   // Dynamic scale multiplier for laboratory apparatuses based on viewport dimensions
   const dynamicScale = (() => {
-    // Standard scaling based on width
-    const baseScale = windowWidth < 480 ? 0.75 : windowWidth < 640 ? 0.9 : windowWidth < 1024 ? 1.15 : 1.35;
+    // Standard scaling based on width (Adjusted carefully for split-grid desktop columns vs single-column mobile)
+    const baseScale = windowWidth < 480 ? 0.58 : windowWidth < 640 ? 0.7 : windowWidth < 1024 ? 0.82 : 0.88;
     if (isFullscreen) {
       // In fullscreen, scale up proportionally but prevent height overflow
-      const heightScale = Math.min(windowHeight / 680, windowWidth / 1100) * 1.5;
-      return Math.max(1.0, Math.min(1.8, heightScale));
+      const heightScale = Math.min(windowHeight / 680, windowWidth / 1100) * 1.25;
+      return Math.max(0.85, Math.min(1.5, heightScale));
     }
     return baseScale;
   })();
@@ -175,6 +243,9 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
     setVariablesState(initialState);
     setIsRunning(false);
     setCurrentStep(0);
+    setActiveLabTab('simulation');
+    setSelectedAnswers({});
+    setSubmittedQuestions({});
   }, [selectedLabId]);
 
   const handleVariableChange = (name: string, value: any) => {
@@ -542,166 +613,264 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
 
         {/* Right Column: Active Simulation and Step logs (Col-span 7) */}
         <div className="xl:col-span-7 flex flex-col space-y-6">
-          {/* Virtual Visual Glass Sandbox */}
-          {(() => {
+          {/* Tab switcher buttons */}
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-2 flex flex-wrap items-center justify-between shadow-xs gap-2 text-right">
+            <div className="flex space-x-2 space-x-reverse">
+              <button
+                onClick={() => setActiveLabTab('simulation')}
+                className={`flex items-center space-x-1.5 space-x-reverse px-4 py-2.5 rounded-xl text-xs font-black transition-all ${
+                  activeLabTab === 'simulation'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                <Beaker className="w-4 h-4 ml-1.5" />
+                <span>المحاكاة والتجربة (معمل التجارب)</span>
+              </button>
+              
+              <button
+                onClick={() => setActiveLabTab('lesson')}
+                className={`flex items-center space-x-1.5 space-x-reverse px-4 py-2.5 rounded-xl text-xs font-black transition-all relative ${
+                  activeLabTab === 'lesson'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                <BookOpen className="w-4 h-4 ml-1.5" />
+                <span>الشرح العلمي والدرس</span>
+                <span className="absolute -top-1 -left-1 bg-amber-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black animate-pulse shadow-xs">جديد</span>
+              </button>
+            </div>
+            
+            <div className="hidden lg:flex items-center text-[10px] text-slate-400 font-bold bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
+              {activeLabTab === 'simulation' ? '🔬 تحكم بالمتغيرات على اليمين وشغّل التجربة' : '📖 اقرأ المفاهيم ثم أجب عن أسئلة التقييم'}
+            </div>
+          </div>
+
+          {activeLabTab === 'simulation' ? (
+            <>
+              {/* Virtual Visual Glass Sandbox */}
+              {(() => {
             const canvasElement = (
               <div
-                className="flex-1 flex items-center justify-center py-6 relative w-full animate-fadeIn transition-all duration-300"
+                className="flex-1 flex flex-col items-center justify-center py-6 relative w-full animate-fadeIn transition-all duration-300 select-none overflow-visible"
                 id="sandbox-canvas"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUpOrLeave}
+                onMouseLeave={handleMouseUpOrLeave}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleMouseUpOrLeave}
                 style={{
-                  transform: isFullscreen ? 'scale(1.05)' : 'none',
-                  transformOrigin: 'center'
+                  transform: isFullscreen ? 'scale(1.03)' : 'none',
+                  transformOrigin: 'center',
+                  perspective: is3DMode ? '1200px' : 'none',
+                  cursor: is3DMode ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                  touchAction: is3DMode ? 'none' : 'auto'
                 }}
               >
               {/* Photosynthesis Lab Render */}
               {selectedLabId === 'lab_photosynthesis' && (
-                <div className={`relative w-full ${containerHeight} bg-gradient-to-b from-sky-100 to-indigo-50 rounded-2xl border border-slate-300 overflow-hidden shadow-md p-4 sm:p-5 flex justify-between items-center text-right transition-all duration-300`}>
-                  {/* Light Source (Lamp) */}
-                  <div className="absolute left-4 top-4 flex flex-col items-center z-10">
-                    <span className="text-[9px] font-bold text-slate-500 mb-1">مصدر ضوء متغير</span>
-                    <div className="relative">
-                      {/* Visual Lamp Head */}
-                      <div className={`w-10 h-10 rounded-full border-2 border-slate-400 bg-slate-300 flex items-center justify-center shadow-xs transition-colors duration-300 ${isRunning && lightIntensity > 0 ? 'bg-yellow-200 border-yellow-400 ring-4 ring-yellow-300/40' : ''}`}>
-                        <svg viewBox="0 0 24 24" className={`w-6 h-6 ${isRunning && lightIntensity > 0 ? 'text-yellow-600 animate-pulse' : 'text-slate-500'}`}>
-                          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                          <circle cx="12" cy="12" r="4" fill="currentColor" />
-                        </svg>
-                      </div>
-                      
-                      {/* Dynamic light rays / beam casting onto the beaker */}
-                      {isRunning && lightIntensity > 0 && (
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: lightIntensity / 100 * 0.45 + 0.1 }}
-                          className="absolute left-5 top-5 w-48 h-32 origin-left bg-gradient-to-r from-yellow-300/60 to-transparent pointer-events-none"
-                          style={{
-                            clipPath: 'polygon(0% 40%, 100% 0%, 100% 100%, 0% 60%)',
-                            transform: 'rotate(15deg)',
-                          }}
-                        />
-                      )}
-                    </div>
-                    <span className="text-[9px] font-bold text-slate-600 mt-1 font-mono">{lightIntensity} واط</span>
-                  </div>
-
-                  {/* Beaker & Apparatus Setup */}
-                  <div 
-                    className="relative mx-auto mt-6 w-52 h-48 flex items-end justify-center z-10 transition-all duration-300"
-                    style={{
-                      transform: `scale(${dynamicScale * 1.25})`,
-                      transformOrigin: 'bottom center'
-                    }}
-                  >
-                    {/* Stand/Base holding the beaker */}
-                    <div className="absolute bottom-0 w-36 h-2 bg-slate-700 rounded-t-md shadow-xs" />
-                    
-                    {/* Glass Beaker */}
-                    <div className="absolute bottom-2 w-32 h-36 border-4 border-slate-300/70 bg-gradient-to-t from-sky-400/25 to-sky-200/10 rounded-b-3xl rounded-t-sm flex items-end justify-center overflow-hidden shadow-inner">
-                      
-                      {/* Water Level Line & wave */}
-                      <div className="absolute bottom-0 left-0 right-0 h-32 bg-sky-300/30 border-t border-sky-400/40">
-                        {/* Steam waves if too hot */}
-                        {isRunning && temperature >= 42 && (
-                          <div className="absolute inset-x-0 top-0 flex justify-around pointer-events-none">
-                            <motion.div animate={{ y: [-10, -30], opacity: [0, 0.6, 0] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-1 h-8 bg-white/40 rounded-full" />
-                            <motion.div animate={{ y: [-10, -30], opacity: [0, 0.6, 0] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.5 }} className="w-1 h-8 bg-white/40 rounded-full" />
-                            <motion.div animate={{ y: [-10, -30], opacity: [0, 0.6, 0] }} transition={{ repeat: Infinity, duration: 1.5, delay: 1 }} className="w-1 h-8 bg-white/40 rounded-full" />
-                          </div>
-                        )}
-                        
-                        {/* Cold Ice block overlay if too cold */}
-                        {temperature <= 12 && (
-                          <div className="absolute bottom-0 inset-x-0 h-8 bg-blue-200/50 backdrop-blur-xs flex items-center justify-center border-t border-blue-300">
-                            <span className="text-[9px] font-bold text-blue-850">ماء بارد جداً</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Inverted Glass Funnel */}
-                      <div className="absolute bottom-0 w-24 h-24 flex flex-col items-center">
-                        {/* Funnel Stem extending up */}
-                        <div className="w-3 h-12 border-2 border-slate-300/70 bg-sky-100/40" />
-                        {/* Funnel Cone */}
-                        <div className="w-20 h-12 border-2 border-slate-300/70 bg-sky-100/30 rounded-b-xl" style={{ clipPath: 'polygon(35% 0%, 65% 0%, 100% 100%, 0% 100%)' }} />
-                      </div>
-
-                      {/* Inverted Graduated Test Tube */}
-                      <div className="absolute bottom-10 w-8 h-20 border-2 border-slate-300/80 bg-sky-200/20 rounded-t-full flex flex-col justify-between p-1">
-                        {/* Calibration marks on test tube */}
-                        <div className="w-full flex flex-col space-y-1 opacity-40">
-                          <div className="w-2 h-0.5 bg-slate-600" />
-                          <div className="w-4 h-0.5 bg-slate-600" />
-                          <div className="w-2 h-0.5 bg-slate-600" />
-                          <div className="w-4 h-0.5 bg-slate-600" />
-                          <div className="w-2 h-0.5 bg-slate-600" />
-                        </div>
-                        {/* Gas pocket collecting at the top of the inverted tube */}
-                        {isRunning && activeSimulationResult.outputValue > 0 && (
-                          <motion.div
-                            initial={{ height: 2 }}
-                            animate={{ height: Math.min(30, 2 + activeSimulationResult.outputValue / 1.5) }}
-                            className="absolute top-0 inset-x-0 bg-white/80 border-b border-sky-300 rounded-t-full"
-                          />
-                        )}
-                      </div>
-
-                      {/* Green Elodea Plant inside the funnel */}
-                      <div className={`absolute bottom-1 w-14 h-14 flex items-end justify-center transition-all duration-500 ${temperature >= 48 ? 'saturate-50 hue-rotate-[60deg]' : co2Concentration === 0 ? 'saturate-50' : 'saturate-110 shadow-lg'}`}>
-                        <svg viewBox="0 0 100 100" className="w-full h-full">
-                          {/* Stem */}
-                          <path d="M 50 100 Q 48 50 50 10" stroke="#047857" strokeWidth="4" fill="none" />
-                          {/* Leaves */}
-                          <path d="M 50 85 Q 20 70 45 60 Q 50 75 50 85 Z" fill="#059669" />
-                          <path d="M 50 85 Q 80 70 55 60 Q 50 75 50 85 Z" fill="#059669" />
-                          <path d="M 50 60 Q 15 50 45 35 Q 50 50 50 60 Z" fill="#10b981" />
-                          <path d="M 50 60 Q 85 50 55 35 Q 50 50 50 60 Z" fill="#10b981" />
-                          <path d="M 50 35 Q 25 20 48 10 Q 50 25 50 35 Z" fill="#34d399" />
-                          <path d="M 50 35 Q 75 20 52 10 Q 50 25 50 35 Z" fill="#34d399" />
-                        </svg>
-                      </div>
-
-                      {/* Floating Oxygen Bubbles rising from plant up through the funnel and test tube */}
-                      {isRunning && Array.from({ length: Math.min(25, bubbleCount) }).map((_, i) => (
-                        <motion.div
-                          key={i}
-                          initial={{ y: 130, x: 55, opacity: 0, scale: 0.5 }}
-                          animate={{
-                            y: [120, 95, 65, 25],
-                            x: [55, 55 + Math.sin(i) * 3, 55 + (i % 2 === 0 ? 3 : -3), 55 + Math.cos(i) * 4],
-                            opacity: [0, 0.9, 0.9, 0],
-                            scale: [0.5, 0.8, 1, 0.8]
-                          }}
-                          transition={{
-                            duration: 2.5 + Math.random() * 2.5,
-                            repeat: Infinity,
-                            delay: i * 0.4,
-                            ease: 'linear'
-                          }}
-                          className="absolute w-2 h-2 rounded-full border border-sky-200 bg-white/70 shadow-xs"
-                        />
-                      ))}
+                <div 
+                  className={`relative w-full ${containerHeight} bg-gradient-to-b from-sky-100 to-indigo-50 rounded-2xl border border-slate-300 overflow-hidden shadow-md p-4 sm:p-5 flex flex-col justify-between items-center text-right transition-all duration-300`}
+                >
+                  {/* Stable Flat Badges & Indicators Overlay (Does not rotate with 3D) */}
+                  <div className="absolute top-4 left-4 right-4 flex justify-between items-start pointer-events-none z-30">
+                    {/* Light Source Info (Aligned Left) */}
+                    <div className="flex flex-col items-start bg-white/90 p-2 rounded-xl border border-slate-200/80 shadow-xs pointer-events-auto text-left">
+                      <span className="text-[9px] font-bold text-slate-500 mb-0.5">مصدر الضوء</span>
+                      <span className="text-[10px] font-black text-amber-600 font-mono">{lightIntensity} واط</span>
                     </div>
 
-                    {/* Apparatus labels pointing to pieces */}
-                    <div className="absolute right-0 top-2 flex flex-col space-y-1.5 text-[9px] font-bold text-slate-600 bg-white/80 p-2 rounded-lg border border-slate-200 shadow-3xs text-right z-20">
-                      <div className="flex items-center space-x-1 space-x-reverse">
-                        <span className="w-1.5 h-1.5 bg-sky-500 rounded-full" />
+                    {/* Apparatus labels pointing to pieces (Aligned Right - clear of the middle beaker!) */}
+                    <div className="flex flex-col space-y-1 text-[9px] font-bold text-slate-700 bg-white/95 p-2.5 rounded-xl border border-slate-200/80 shadow-xs text-right pointer-events-auto">
+                      <div className="flex items-center space-x-1.5 space-x-reverse">
+                        <span className="w-2 h-2 bg-sky-500 rounded-full" />
                         <span>أنبوب مدرج لجمع الغاز</span>
                       </div>
-                      <div className="flex items-center space-x-1 space-x-reverse">
-                        <span className="w-1.5 h-1.5 bg-emerald-600 rounded-full" />
+                      <div className="flex items-center space-x-1.5 space-x-reverse">
+                        <span className="w-2 h-2 bg-emerald-600 rounded-full" />
                         <span>نبات الإيلوديا المائي</span>
                       </div>
-                      <div className="flex items-center space-x-1 space-x-reverse">
-                        <span className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                      <div className="flex items-center space-x-1.5 space-x-reverse">
+                        <span className="w-2 h-2 bg-amber-500 rounded-full" />
                         <span>قمع زجاجي مقلوب</span>
                       </div>
                       {isRunning && activeSimulationResult.outputValue > 0 && (
-                        <div className="flex items-center space-x-1 space-x-reverse text-emerald-600 animate-pulse">
-                          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                        <div className="flex items-center space-x-1.5 space-x-reverse text-emerald-600 animate-pulse">
+                          <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
                           <span>فقاعات غاز الأكسجين (O₂)</span>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* 3D Lab Workbench Wrapper (Enclosing the 3D scene elements) */}
+                  <div 
+                    className="w-full flex-1 flex items-end justify-center relative mt-8 select-none"
+                    style={is3DMode ? {
+                      transform: `rotateX(${rotX}deg) rotateY(${rotY}deg)`,
+                      transformStyle: 'preserve-3d',
+                      perspective: '1200px',
+                      transition: isDragging ? 'none' : 'transform 0.3s ease-out'
+                    } : {}}
+                  >
+                    {/* 3D Lab Workbench Grid Base */}
+                    {is3DMode && (
+                      <div 
+                        className="absolute bottom-0 inset-x-0 h-16 bg-gradient-to-t from-slate-200/60 to-slate-100/10 border-t border-slate-300/40 pointer-events-none" 
+                        style={{
+                          transform: 'translateZ(-45px)',
+                          backgroundSize: '24px 24px',
+                          backgroundImage: 'linear-gradient(to right, rgba(148,163,184,0.1) 1px, transparent 1px), linear-gradient(to top, rgba(148,163,184,0.1) 1px, transparent 1px)'
+                        }}
+                      />
+                    )}
+
+                    {/* Light Source (Lamp Head) within the 3D space */}
+                    <div className="absolute left-6 bottom-12 flex flex-col items-center z-10" style={is3DMode ? { transform: 'translateZ(10px)' } : {}}>
+                      <div className="relative">
+                        {/* Visual Lamp Head */}
+                        <div className={`w-12 h-12 rounded-full border-2 border-slate-400 bg-slate-250 flex items-center justify-center shadow-md transition-colors duration-300 ${isRunning && lightIntensity > 0 ? 'bg-yellow-100 border-yellow-400 ring-4 ring-yellow-300/40' : ''}`}>
+                          <svg viewBox="0 0 24 24" className={`w-7 h-7 ${isRunning && lightIntensity > 0 ? 'text-yellow-600 animate-pulse' : 'text-slate-500'}`}>
+                            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                            <circle cx="12" cy="12" r="4" fill="currentColor" />
+                          </svg>
+                        </div>
+                        
+                        {/* Dynamic light rays / beam casting onto the beaker */}
+                        {isRunning && lightIntensity > 0 && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: lightIntensity / 100 * 0.45 + 0.15 }}
+                            className="absolute left-6 top-6 w-52 h-36 origin-left bg-gradient-to-r from-yellow-300/50 to-transparent pointer-events-none"
+                            style={{
+                              clipPath: 'polygon(0% 40%, 100% 0%, 100% 100%, 0% 60%)',
+                              transform: 'rotate(10deg)',
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Beaker & Apparatus Setup */}
+                    <div 
+                      className="relative mx-auto w-52 h-44 flex items-end justify-center z-10 transition-all duration-300"
+                      style={{
+                        transform: `scale(${dynamicScale * 1.2})`,
+                        transformOrigin: 'bottom center',
+                        transformStyle: 'preserve-3d'
+                      }}
+                    >
+                      {/* Stand/Base holding the beaker */}
+                      <div className="absolute bottom-0 w-36 h-2.5 bg-slate-700 rounded-t-md shadow-xs" />
+                      
+                      {/* Glass Beaker with 3D volumetric properties */}
+                      <div 
+                        className="absolute bottom-2.5 w-32 h-36 border-4 border-slate-300/60 bg-gradient-to-t from-sky-400/15 to-sky-200/5 rounded-b-3xl rounded-t-sm flex items-end justify-center overflow-visible shadow-inner"
+                        style={is3DMode ? { transform: 'translateZ(15px)', transformStyle: 'preserve-3d' } : {}}
+                      >
+                        {/* 3D Top Opening Glass Rim */}
+                        {is3DMode && (
+                          <div className="absolute -top-3 left-0 w-full h-6 rounded-full border-2 border-white/60 bg-white/10 z-30 shadow-xs pointer-events-none" />
+                        )}
+                        
+                        {/* Water Level Line & wave */}
+                        <div className="absolute bottom-0 left-0 right-0 h-32 bg-sky-300/25 border-t border-sky-400/30">
+                          {/* 3D Volumetric Water Surface Ellipse */}
+                          {is3DMode && (
+                            <div className="absolute -top-3 left-0 w-full h-6 rounded-full border border-sky-400/40 bg-sky-300/50 z-20 shadow-inner pointer-events-none" />
+                          )}
+
+                          {/* Steam waves if too hot */}
+                          {isRunning && temperature >= 42 && (
+                            <div className="absolute inset-x-0 top-0 flex justify-around pointer-events-none">
+                              <motion.div animate={{ y: [-10, -30], opacity: [0, 0.6, 0] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-1 h-8 bg-white/40 rounded-full" />
+                              <motion.div animate={{ y: [-10, -30], opacity: [0, 0.6, 0] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.5 }} className="w-1 h-8 bg-white/40 rounded-full" />
+                              <motion.div animate={{ y: [-10, -30], opacity: [0, 0.6, 0] }} transition={{ repeat: Infinity, duration: 1.5, delay: 1 }} className="w-1 h-8 bg-white/40 rounded-full" />
+                            </div>
+                          )}
+                          
+                          {/* Cold Ice block overlay if too cold */}
+                          {temperature <= 12 && (
+                            <div className="absolute bottom-0 inset-x-0 h-8 bg-blue-200/40 backdrop-blur-xs flex items-center justify-center border-t border-blue-300/80">
+                              <span className="text-[9px] font-bold text-blue-800">ماء بارد جداً</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Inverted Glass Funnel */}
+                        <div className="absolute bottom-0 w-24 h-24 flex flex-col items-center">
+                          {/* Funnel Stem extending up */}
+                          <div className="w-3 h-12 border-2 border-slate-300/70 bg-sky-100/40" />
+                          {/* Funnel Cone */}
+                          <div className="w-20 h-12 border-2 border-slate-300/70 bg-sky-100/30 rounded-b-xl" style={{ clipPath: 'polygon(35% 0%, 65% 0%, 100% 100%, 0% 100%)' }} />
+                        </div>
+
+                        {/* Inverted Graduated Test Tube with 3D translation */}
+                        <div 
+                          className="absolute bottom-10 w-8 h-20 border-2 border-slate-300/80 bg-sky-250/25 rounded-t-full flex flex-col justify-between p-1"
+                          style={is3DMode ? { transform: 'translateZ(25px)', transformStyle: 'preserve-3d' } : {}}
+                        >
+                          {/* 3D Tube bottom round highlight */}
+                          {is3DMode && (
+                            <div className="absolute -top-1 left-0 w-full h-3 rounded-full border border-white/40 bg-white/5 z-20 pointer-events-none" />
+                          )}
+                          {/* Calibration marks on test tube */}
+                          <div className="w-full flex flex-col space-y-1 opacity-40">
+                            <div className="w-2 h-0.5 bg-slate-600" />
+                            <div className="w-4 h-0.5 bg-slate-600" />
+                            <div className="w-2 h-0.5 bg-slate-600" />
+                            <div className="w-4 h-0.5 bg-slate-600" />
+                            <div className="w-2 h-0.5 bg-slate-600" />
+                          </div>
+                          {/* Gas pocket collecting at the top of the inverted tube */}
+                          {isRunning && activeSimulationResult.outputValue > 0 && (
+                            <motion.div
+                              initial={{ height: 2 }}
+                              animate={{ height: Math.min(30, 2 + activeSimulationResult.outputValue / 1.5) }}
+                              className="absolute top-0 inset-x-0 bg-white/80 border-b border-sky-300 rounded-t-full"
+                            />
+                          )}
+                        </div>
+
+                        {/* Green Elodea Plant inside the funnel */}
+                        <div className={`absolute bottom-1 w-14 h-14 flex items-end justify-center transition-all duration-500 ${temperature >= 48 ? 'saturate-50 hue-rotate-[60deg]' : co2Concentration === 0 ? 'saturate-50' : 'saturate-110 shadow-lg'}`}>
+                          <svg viewBox="0 0 100 100" className="w-full h-full">
+                            {/* Stem */}
+                            <path d="M 50 100 Q 48 50 50 10" stroke="#047857" strokeWidth="4" fill="none" />
+                            {/* Leaves */}
+                            <path d="M 50 85 Q 20 70 45 60 Q 50 75 50 85 Z" fill="#059669" />
+                            <path d="M 50 85 Q 80 70 55 60 Q 50 75 50 85 Z" fill="#059669" />
+                            <path d="M 50 60 Q 15 50 45 35 Q 50 50 50 60 Z" fill="#10b981" />
+                            <path d="M 50 60 Q 85 50 55 35 Q 50 50 50 60 Z" fill="#10b981" />
+                            <path d="M 50 35 Q 25 20 48 10 Q 50 25 50 35 Z" fill="#34d399" />
+                            <path d="M 50 35 Q 75 20 52 10 Q 50 25 50 35 Z" fill="#34d399" />
+                          </svg>
+                        </div>
+
+                        {/* Floating Oxygen Bubbles rising from plant up through the funnel and test tube */}
+                        {isRunning && Array.from({ length: Math.min(25, bubbleCount) }).map((_, i) => (
+                          <motion.div
+                            key={i}
+                            initial={{ y: 130, x: 55, opacity: 0, scale: 0.5 }}
+                            animate={{
+                              y: [120, 95, 65, 25],
+                              x: [55, 55 + Math.sin(i) * 3, 55 + (i % 2 === 0 ? 3 : -3), 55 + Math.cos(i) * 4],
+                              opacity: [0, 0.9, 0.9, 0],
+                              scale: [0.5, 0.8, 1, 0.8]
+                            }}
+                            transition={{
+                              duration: 2.5 + Math.random() * 2.5,
+                              repeat: Infinity,
+                              delay: i * 0.4,
+                              ease: 'linear'
+                            }}
+                            className="absolute w-2 h-2 rounded-full border border-sky-200 bg-white/70 shadow-xs"
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -996,8 +1165,8 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                       transformOrigin: 'bottom center'
                     }}
                   >
-                    {/* Left Side: Plant shoot sealed in water vessel */}
-                    <div className="relative flex flex-col items-center">
+                    {/* Left Side: Plant shoot sealed in water vessel (Prevent Squashing) */}
+                    <div className="relative flex-shrink-0 w-24 flex flex-col items-center">
                       {/* Plant Shoot with leaves */}
                       <div className="absolute -top-16 w-16 h-16 flex items-end justify-center z-10">
                         <svg viewBox="0 0 100 100" className={`w-full h-full text-emerald-600 transition-all ${isRunning && windSpeed > 0 ? 'animate-pulse' : ''}`}>
@@ -1083,8 +1252,8 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                       <div className="text-[7px] text-center font-bold text-slate-500 mt-0.5">أنبوبة شعرية زجاجية دقيقة</div>
                     </div>
 
-                    {/* Right Side: Reset Syringe Reservoir */}
-                    <div className="relative flex flex-col items-center">
+                    {/* Right Side: Reset Syringe Reservoir (Prevent Squashing) */}
+                    <div className="relative flex-shrink-0 w-20 flex flex-col items-center">
                       {/* Syringe Plunger */}
                       <motion.div
                         animate={isRunning ? { y: [0, 3, 0] } : {}}
@@ -1317,15 +1486,42 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                       transformOrigin: 'center'
                     }}
                   >
-                    <div className="w-48 h-32 border-2 border-slate-300 bg-white/80 rounded-2xl relative overflow-hidden flex flex-col justify-between p-2 shadow-inner">
+                    {/* Reaction Vessel (Widened to 64/16rem to completely eliminate overlaps) */}
+                    <div className="w-64 h-36 border-2 border-slate-300 bg-white/95 rounded-2xl relative overflow-hidden flex flex-col justify-between p-2 shadow-md">
                       {/* Thermometer / pH Gauge indicators */}
-                      <div className="flex justify-between items-center text-[7px] font-bold text-slate-400 border-b border-slate-150 pb-1">
+                      <div className="flex justify-between items-center text-[8px] font-bold text-slate-500 border-b border-slate-100 pb-1.5 px-1">
                         <span>مقياس النشاط الإنزيمي</span>
-                        <span>مقياس الحرارة والـ pH</span>
+                        <span>حالة الوسط والحرارة</span>
+                      </div>
+
+                      {/* Chemical Liquid Color changing dynamically with pH */}
+                      <div 
+                        className={`absolute inset-x-0 bottom-0 h-24 transition-colors duration-700 pointer-events-none opacity-40 ${
+                          variablesState.ph_level < 4 
+                            ? 'bg-rose-250 border-t border-rose-300' 
+                            : variablesState.ph_level > 9 
+                              ? 'bg-purple-250 border-t border-purple-300' 
+                              : 'bg-emerald-100 border-t border-emerald-200'
+                        }`}
+                      >
+                        {/* Ice crystals overlay if too cold */}
+                        {variablesState.temp_c < 15 && (
+                          <div className="absolute inset-0 bg-blue-200/30 flex items-center justify-center">
+                            <span className="text-[7px] font-extrabold text-blue-800 animate-pulse">❄️ تبريد عالي (النشاط متوقف)</span>
+                          </div>
+                        )}
+                        {/* Steam waves if too hot */}
+                        {isRunning && variablesState.temp_c >= 45 && (
+                          <div className="absolute inset-x-0 top-1 flex justify-around opacity-75">
+                            <motion.div animate={{ y: [4, -12], opacity: [0, 0.8, 0] }} transition={{ repeat: Infinity, duration: 1.2 }} className="w-0.5 h-4 bg-white rounded-full" />
+                            <motion.div animate={{ y: [4, -12], opacity: [0, 0.8, 0] }} transition={{ repeat: Infinity, duration: 1.2, delay: 0.4 }} className="w-0.5 h-4 bg-white rounded-full" />
+                            <motion.div animate={{ y: [4, -12], opacity: [0, 0.8, 0] }} transition={{ repeat: Infinity, duration: 1.2, delay: 0.8 }} className="w-0.5 h-4 bg-white rounded-full" />
+                          </div>
+                        )}
                       </div>
 
                       {/* Active collision space */}
-                      <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+                      <div className="flex-1 relative flex items-center justify-center overflow-hidden z-10">
                         {isRunning && activeSimulationResult.outputValue > 0 ? (
                           /* Active animation: Molecules lock and key */
                           <div className="w-full h-full relative">
@@ -1333,41 +1529,45 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                             <motion.div 
                               animate={{ scale: [1, 1.05, 1], rotate: [0, 5, 0] }}
                               transition={{ repeat: Infinity, duration: 2 }}
-                              className="absolute left-16 top-6 w-12 h-12 bg-sky-200 border-2 border-sky-400 rounded-full flex items-center justify-center shadow-3xs"
+                              className="absolute left-[88px] top-4 w-14 h-14 bg-gradient-to-br from-sky-100 to-sky-300 border-2 border-sky-400 rounded-full flex flex-col items-center justify-center shadow-md"
                             >
-                              <span className="text-[7px] font-black text-sky-800">إنزيم</span>
+                              <span className="text-[8px] font-extrabold text-sky-850">الإنزيم</span>
+                              <span className="text-[6px] text-sky-700 font-mono">Cleft Active</span>
+                              {/* Cleft Site shape */}
+                              <div className="absolute -top-1 w-4 h-3 bg-white/90 border-b border-sky-400 rounded-full" />
                             </motion.div>
 
                             {/* Substrate colliding */}
                             <motion.div
                               animate={{ 
-                                x: [0, 60, 0],
-                                y: [0, 20, 0]
+                                x: [0, 84, 0],
+                                y: [0, 10, 0]
                               }}
                               transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
-                              className="absolute left-4 top-4 w-5 h-5 bg-amber-400 border border-amber-600 rounded-md flex items-center justify-center"
+                              className="absolute left-4 top-2 w-8 h-8 bg-gradient-to-tr from-amber-400 to-yellow-300 border border-amber-600 rounded-lg flex items-center justify-center shadow-xs"
                             >
-                              <span className="text-[6px] font-bold text-white">غذاء</span>
+                              <span className="text-[7px] font-extrabold text-amber-950">غذاء</span>
                             </motion.div>
 
                             {/* Product breaking away */}
                             <motion.div
                               animate={{ 
-                                x: [80, 140],
+                                x: [110, 195],
+                                y: [20, 5],
                                 opacity: [0, 1, 0]
                               }}
                               transition={{ repeat: Infinity, duration: 2, delay: 1 }}
-                              className="absolute left-10 top-12 w-4 h-4 bg-emerald-400 border border-emerald-600 rounded-full flex items-center justify-center"
+                              className="absolute left-6 top-8 w-6 h-6 bg-gradient-to-tr from-emerald-400 to-teal-300 border border-emerald-600 rounded-full flex items-center justify-center shadow-xs"
                             >
-                              <span className="text-[5px] font-bold text-white">نواتج</span>
+                              <span className="text-[6px] font-extrabold text-emerald-950">نواتج</span>
                             </motion.div>
                           </div>
                         ) : isRunning ? (
                           /* Denatured / Inactive state */
-                          <div className="flex flex-col items-center justify-center text-center space-y-1">
+                          <div className="flex flex-col items-center justify-center text-center space-y-1 bg-white/90 p-1.5 rounded-xl border border-rose-100 shadow-3xs max-w-[210px] mx-auto">
                             <span className="text-[12px]">⚠️</span>
                             <span className="text-[8px] font-black text-rose-600">تثبيط كيميائي / تخريب حراري</span>
-                            <span className="text-[7px] text-slate-400 leading-normal">بنية الإنزيم الفراغية مشوهة وغير قادرة على هضم المادة المستهدفة</span>
+                            <span className="text-[7px] text-slate-500 leading-normal font-medium">بنية الإنزيم الفراغية مشوهة وغير قادرة على هضم المادة المستهدفة</span>
                           </div>
                         ) : (
                           <span className="text-[8px] font-bold text-slate-400">انقر على تشغيل لبدء تحلل الغذاء</span>
@@ -1375,12 +1575,12 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                       </div>
 
                       {/* Percentage gauge at bottom */}
-                      <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner mt-1">
                         <motion.div 
                           initial={{ width: 0 }}
                           animate={{ width: `${activeSimulationResult.outputValue}%` }}
                           transition={{ duration: 1 }}
-                          className="h-full bg-sky-500"
+                          className="h-full bg-gradient-to-r from-sky-400 to-sky-600 shadow-xs"
                         />
                       </div>
                     </div>
@@ -1412,42 +1612,49 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                       transformOrigin: 'center'
                     }}
                   >
-                    <div className="w-52 h-32 bg-slate-900 border border-slate-700 rounded-2xl relative overflow-hidden p-2 shadow-inner">
+                    {/* Battle container (Enlarged to w-60 to avoid any cramped overlap) */}
+                    <div className="w-60 h-36 bg-slate-950 border-2 border-slate-800 rounded-2xl relative overflow-hidden p-2 shadow-lg">
                       {/* Glowing radar lines */}
                       <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:16px_16px] opacity-25" />
 
                       {isRunning ? (
                         <div className="w-full h-full relative">
-                          {/* Pathogens (Antigens) floating */}
+                          {/* Pathogens (Antigens) floating as realistic spiked virus models */}
                           {Array.from({ length: 4 }).map((_, i) => (
                             <motion.div
                               key={i}
                               animate={{ 
                                 x: [20 + i * 40, 10 + i * 35, 20 + i * 40],
-                                y: [20 + i * 15, 60 - i * 10, 20 + i * 15]
+                                y: [20 + i * 12, 55 - i * 8, 20 + i * 12]
                               }}
                               transition={{ repeat: Infinity, duration: 4 }}
-                              className="absolute w-4 h-4 bg-red-600 border border-red-800 rounded-full flex items-center justify-center shadow-xs"
+                              className="absolute w-5 h-5 bg-gradient-to-br from-red-500 to-rose-700 border border-red-900 rounded-full flex items-center justify-center shadow-lg shadow-red-900/30"
                             >
-                              <span className="text-[6px] font-bold text-white">جرثومة</span>
+                              {/* Spikes representation */}
+                              <div className="absolute inset-0 border-2 border-dashed border-red-300/40 rounded-full animate-spin" />
+                              <span className="text-[5px] font-black text-white scale-90">جرثومة</span>
                             </motion.div>
                           ))}
 
-                          {/* Antibodies (Y-shaped green indicators) */}
+                          {/* Antibodies (Y-shaped green indicators) as actual path/polygon SVG graphics */}
                           {variablesState.vaccination_status ? (
                             /* Numerous antibodies docking and attacking instantly */
-                            Array.from({ length: 7 }).map((_, i) => (
+                            Array.from({ length: 8 }).map((_, i) => (
                               <motion.div
                                 key={i}
-                                initial={{ x: 180, y: 10 + i * 15 }}
+                                initial={{ x: 200, y: 10 + i * 12 }}
                                 animate={{ 
-                                  x: [180, 40 + (i % 3) * 45, 180],
-                                  y: [10 + i * 15, 25 + (i % 2) * 20, 10 + i * 15]
+                                  x: [200, 35 + (i % 3) * 45, 200],
+                                  y: [10 + i * 12, 20 + (i % 2) * 15, 10 + i * 12],
+                                  rotate: [0, 360, 0]
                                 }}
-                                transition={{ repeat: Infinity, duration: 3, delay: i * 0.2 }}
-                                className="absolute text-emerald-400 font-bold text-xs"
+                                transition={{ repeat: Infinity, duration: 3, delay: i * 0.15 }}
+                                className="absolute w-4.5 h-4.5 text-emerald-400 drop-shadow-[0_0_2px_rgba(52,211,153,0.5)]"
                               >
-                                Y
+                                {/* SVG Y-Antibody Graphic */}
+                                <svg viewBox="0 0 100 100" className="w-full h-full fill-emerald-400">
+                                  <path d="M 50 100 L 50 50 L 15 15 M 50 50 L 85 15" stroke="#34d399" strokeWidth="22" strokeLinecap="round" fill="none" />
+                                </svg>
                               </motion.div>
                             ))
                           ) : (
@@ -1455,15 +1662,18 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                             Array.from({ length: 2 }).map((_, i) => (
                               <motion.div
                                 key={i}
-                                initial={{ x: 180, y: 30 + i * 30, opacity: 0 }}
+                                initial={{ x: 200, y: 30 + i * 30, opacity: 0 }}
                                 animate={{ 
-                                  x: [180, 50, 180],
-                                  opacity: [0, 1, 1, 0]
+                                  x: [200, 50, 200],
+                                  opacity: [0, 1, 1, 0],
+                                  rotate: [0, 180, 0]
                                 }}
                                 transition={{ repeat: Infinity, duration: 5, delay: 2.5 }}
-                                className="absolute text-emerald-400 font-bold text-[10px]"
+                                className="absolute w-4 h-4 text-emerald-400/80"
                               >
-                                Y
+                                <svg viewBox="0 0 100 100" className="w-full h-full fill-emerald-400/80">
+                                  <path d="M 50 100 L 50 50 L 15 15 M 50 50 L 85 15" stroke="#34d399" strokeWidth="22" strokeLinecap="round" fill="none" />
+                                </svg>
                               </motion.div>
                             ))
                           )}
@@ -1474,7 +1684,7 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                         </div>
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                          <span className="text-rose-500 font-black text-xs animate-pulse">الجسم مهدد بمسببات الأمراض</span>
+                          <span className="text-rose-500 font-black text-[10px] animate-pulse">الجسم مهدد بمسببات الأمراض</span>
                           <span className="text-[7px] text-slate-400 mt-1">انقر على زر "تشغيل التجربة" لتشغيل خط الدفاع اللمفاوي</span>
                         </div>
                       )}
@@ -1755,51 +1965,52 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                       transformOrigin: 'center'
                     }}
                   >
-                    <div className="w-60 h-32 bg-slate-900 border border-slate-800 rounded-2xl relative overflow-hidden p-2 shadow-inner">
+                    {/* Widen dialyzer machine to w-72 h-36 to accommodate side labels beautifully without text wraps */}
+                    <div className="w-72 h-36 bg-slate-950 border border-slate-800 rounded-2xl relative overflow-hidden p-3 shadow-lg">
                       {/* Counter-current flow lines */}
                       <div className="flex flex-col h-full justify-between relative">
                         
                         {/* Patient Blood line (Red - top) */}
-                        <div className="h-10 bg-rose-950/95 border-b border-rose-800 rounded-t-md relative flex items-center justify-between px-3">
-                          <span className="text-[7px] text-rose-300 font-extrabold">شريان المريض (دم محمل باليوريا)</span>
+                        <div className="h-11 bg-rose-950/95 border-b border-rose-800 rounded-t-md relative flex items-center justify-between px-3">
+                          <span className="text-[7.5px] text-rose-300 font-extrabold z-10">شريان المريض (دم محمل باليوريا)</span>
                           {isRunning && (
                             <div className="absolute inset-0 overflow-hidden flex items-center">
-                              {/* Red blood corpuscles flow */}
+                              {/* Red blood corpuscles flow (Realistic concave disc-like styling) */}
                               <motion.div 
                                 animate={{ x: [-200, 100] }}
                                 transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
                                 className="w-full flex justify-around"
                               >
-                                {Array.from({ length: 4 }).map((_, i) => (
-                                  <div key={i} className="w-2.5 h-1.5 bg-red-600 rounded-full" />
+                                {Array.from({ length: 5 }).map((_, i) => (
+                                  <div key={i} className="w-3.5 h-2 bg-gradient-to-br from-red-500 to-red-700 rounded-full border border-red-900 shadow-inner" />
                                 ))}
                               </motion.div>
 
                               {/* Tiny yellow urea dots diffusing down */}
-                              {Array.from({ length: 5 }).map((_, i) => (
+                              {Array.from({ length: 6 }).map((_, i) => (
                                 <motion.div
                                   key={i}
                                   initial={{ y: 5, x: 20 + i * 35, opacity: 1 }}
-                                  animate={{ y: 22, opacity: [1, 0.7, 0] }}
-                                  transition={{ repeat: Infinity, duration: 1.5, delay: i * 0.3 }}
-                                  className="absolute w-1.5 h-1.5 bg-yellow-400 rounded-full shadow-xs"
+                                  animate={{ y: 24, opacity: [1, 0.7, 0] }}
+                                  transition={{ repeat: Infinity, duration: 1.5, delay: i * 0.25 }}
+                                  className="absolute w-2 h-2 bg-yellow-400 rounded-full shadow-md border border-yellow-500/50"
                                 />
                               ))}
                             </div>
                           )}
-                          <span className="text-[7px] text-rose-400 font-black z-10 font-mono">دم وارد</span>
+                          <span className="text-[7.5px] text-rose-400 font-black z-10 font-mono bg-slate-950/60 px-1 rounded">دم وارد</span>
                         </div>
 
-                        {/* Dialysis Semi-permeable Membrane indicator */}
-                        <div className="h-1.5 bg-indigo-900 border-y border-indigo-700 flex justify-around items-center">
-                          {Array.from({ length: 10 }).map((_, i) => (
-                            <div key={i} className="w-1 h-0.5 bg-indigo-300/40 rounded-full" />
+                        {/* Dialysis Semi-permeable Membrane indicator (Enhanced glowing effect) */}
+                        <div className="h-2 bg-gradient-to-r from-indigo-950 via-indigo-900 to-indigo-950 border-y border-indigo-700 flex justify-around items-center">
+                          {Array.from({ length: 14 }).map((_, i) => (
+                            <div key={i} className="w-1.5 h-0.5 bg-indigo-300/60 rounded-full shadow-glow" />
                           ))}
                         </div>
 
                         {/* Dialysate Washing fluid line (Blue - bottom, counter flow left to right) */}
-                        <div className="h-10 bg-sky-950/90 border-t border-sky-800 rounded-b-md relative flex items-center justify-between px-3">
-                          <span className="text-[7px] text-sky-300 font-extrabold">سائل غسيل الكلى (يسحب الفضلات)</span>
+                        <div className="h-11 bg-sky-950/90 border-t border-sky-800 rounded-b-md relative flex items-center justify-between px-3">
+                          <span className="text-[7.5px] text-sky-300 font-extrabold z-10">سائل غسيل الكلى (يسحب الفضلات)</span>
                           {isRunning && (
                             <div className="absolute inset-0 overflow-hidden flex items-center">
                               <motion.div 
@@ -1807,23 +2018,23 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                                 transition={{ repeat: Infinity, duration: 4, ease: 'linear' }}
                                 className="w-full flex justify-around"
                               >
-                                {Array.from({ length: 3 }).map((_, i) => (
-                                  <div key={i} className="w-2.5 h-1 bg-sky-500/30 rounded-full" />
+                                {Array.from({ length: 4 }).map((_, i) => (
+                                  <div key={i} className="w-3 h-1.5 bg-sky-500/40 rounded-full shadow-inner" />
                                 ))}
                               </motion.div>
                               {/* Urea dots exiting with fluid to the left */}
-                              {Array.from({ length: 4 }).map((_, i) => (
+                              {Array.from({ length: 5 }).map((_, i) => (
                                 <motion.div
                                   key={i}
-                                  initial={{ x: 200 - i * 40, y: 15, opacity: 0 }}
-                                  animate={{ x: [200 - i * 40, -10], opacity: [0, 0.8, 0] }}
-                                  transition={{ repeat: Infinity, duration: 3, ease: 'linear', delay: i * 0.5 }}
-                                  className="absolute w-1.5 h-1.5 bg-yellow-400 rounded-full"
+                                  initial={{ x: 220 - i * 40, y: 15, opacity: 0 }}
+                                  animate={{ x: [220 - i * 40, -10], opacity: [0, 0.8, 0] }}
+                                  transition={{ repeat: Infinity, duration: 3, ease: 'linear', delay: i * 0.4 }}
+                                  className="absolute w-2 h-2 bg-yellow-400 rounded-full border border-yellow-500/50"
                                 />
                               ))}
                             </div>
                           )}
-                          <span className="text-[7px] text-sky-400 font-black z-10 font-mono">سائل خارج</span>
+                          <span className="text-[7.5px] text-sky-400 font-black z-10 font-mono bg-slate-950/60 px-1 rounded">سائل خارج</span>
                         </div>
                       </div>
                     </div>
@@ -2139,8 +2350,8 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                     <div className="lg:col-span-8 bg-slate-50 border border-slate-200/60 rounded-3xl p-5 flex flex-col justify-between shadow-inner relative overflow-hidden h-full">
                       <div className="absolute inset-0 bg-white/10 pointer-events-none" />
                       
-                      {/* inner header */}
-                      <div className="flex items-center justify-between z-10 border-b border-slate-200/40 pb-3 mb-4 shrink-0">
+                      {/* inner header with 3D controls */}
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between z-20 gap-3 border-b border-slate-200/40 pb-3 mb-4 shrink-0">
                         <div className="flex items-center space-x-2 space-x-reverse">
                           <button
                             onClick={() => setIsFullscreen(false)}
@@ -2150,9 +2361,59 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
                             <Minimize2 className="w-3.5 h-3.5 ml-1 text-rose-600" />
                             <span>إنهاء ملء الشاشة</span>
                           </button>
-                          <span className="text-[10px] text-slate-400 font-mono font-bold">Sim v2.0 - Active</span>
+                          
+                          {/* 3D Mode Toggle Button */}
+                          <button
+                            onClick={() => setIs3DMode(!is3DMode)}
+                            className={`flex items-center space-x-1.5 space-x-reverse border rounded-lg py-1 px-3 text-[10px] font-black transition-all shadow-3xs ${
+                              is3DMode 
+                                ? 'bg-emerald-600 border-emerald-500 text-white shadow-emerald-600/10'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            <Layers className={`w-3.5 h-3.5 ml-1 ${is3DMode ? 'animate-pulse' : ''}`} />
+                            <span>{is3DMode ? 'المنظور المجسم 3D نشط' : 'تفعيل البعد الثالث 3D'}</span>
+                          </button>
                         </div>
-                        <h4 className="text-xs font-bold text-slate-500">مخرجات المختبر التفاعلي</h4>
+
+                        {/* Interactive 3D controls if active */}
+                        {is3DMode ? (
+                          <div className="flex flex-wrap items-center gap-3 text-[10px] font-bold text-slate-600 bg-emerald-50/50 border border-emerald-100 rounded-xl px-3 py-1 text-right shadow-3xs">
+                            <div className="flex items-center space-x-1.5 space-x-reverse">
+                              <span className="text-[9px] font-mono text-emerald-800">{Math.round(rotY)}°</span>
+                              <span className="text-slate-500">دوران:</span>
+                              <input 
+                                type="range" 
+                                min="-45" 
+                                max="45" 
+                                value={rotY} 
+                                onChange={(e) => setRotY(Number(e.target.value))}
+                                className="w-20 accent-emerald-600 bg-slate-250 h-1 rounded-full cursor-pointer"
+                              />
+                            </div>
+                            <div className="flex items-center space-x-1.5 space-x-reverse">
+                              <span className="text-[9px] font-mono text-emerald-800">{Math.round(rotX)}°</span>
+                              <span className="text-slate-500">إمالة:</span>
+                              <input 
+                                type="range" 
+                                min="-25" 
+                                max="25" 
+                                value={rotX} 
+                                onChange={(e) => setRotX(Number(e.target.value))}
+                                className="w-20 accent-emerald-600 bg-slate-250 h-1 rounded-full cursor-pointer"
+                              />
+                            </div>
+                            <button 
+                              onClick={() => { setRotX(12); setRotY(-15); }}
+                              className="bg-white hover:bg-slate-100 text-slate-650 border border-slate-200 rounded px-1.5 py-0.5 text-[8px] font-black transition-all"
+                            >
+                              إعادة تعيين المنظور
+                            </button>
+                            <span className="text-[8px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded font-black">اسحب الفأرة للتوجيه ثلاثي الأبعاد المباشر 🖱️</span>
+                          </div>
+                        ) : (
+                          <h4 className="text-xs font-bold text-slate-500">مخرجات المختبر التفاعلي</h4>
+                        )}
                       </div>
 
                       <div className="flex-1 flex items-center justify-center relative w-full">
@@ -2186,19 +2447,69 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
               <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-5 flex flex-col justify-between min-h-[300px] relative overflow-hidden shadow-inner">
                 <div className="absolute inset-0 bg-white/10 pointer-events-none" />
 
-                <div className="flex items-center justify-between z-10 border-b border-slate-200/40 pb-3 mb-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between z-20 gap-3 border-b border-slate-200/40 pb-3 mb-2">
                   <div className="flex items-center space-x-2 space-x-reverse">
                     <button
                       onClick={() => setIsFullscreen(true)}
-                      className="flex items-center space-x-1 space-x-reverse bg-white hover:bg-slate-150 text-slate-650 border border-slate-200 rounded-lg py-1 px-2.5 text-[10px] font-black transition-all shadow-3xs"
+                      className="flex items-center space-x-1.5 space-x-reverse bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg py-1 px-2.5 text-[10px] font-black transition-all shadow-3xs"
                       title="تكبير لعرض ملء الشاشة"
                     >
                       <Maximize2 className="w-3.5 h-3.5 ml-1 text-emerald-600" />
                       <span>ملء الشاشة</span>
                     </button>
-                    <span className="text-[10px] text-slate-400 font-mono font-bold">Sim v2.0 - Active</span>
+                    
+                    {/* 3D Mode Toggle Button */}
+                    <button
+                      onClick={() => setIs3DMode(!is3DMode)}
+                      className={`flex items-center space-x-1.5 space-x-reverse border rounded-lg py-1 px-3 text-[10px] font-black transition-all shadow-3xs ${
+                        is3DMode 
+                          ? 'bg-emerald-600 border-emerald-500 text-white shadow-emerald-600/10'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Layers className={`w-3.5 h-3.5 ml-1 ${is3DMode ? 'animate-pulse' : ''}`} />
+                      <span>{is3DMode ? 'المنظور المجسم 3D نشط' : 'تفعيل البعد الثالث 3D'}</span>
+                    </button>
                   </div>
-                  <h4 className="text-xs font-bold text-slate-500">مخرجات المختبر التفاعلي</h4>
+
+                  {/* Interactive 3D controls if active */}
+                  {is3DMode ? (
+                    <div className="flex flex-wrap items-center gap-2.5 text-[10px] font-bold text-slate-600 bg-emerald-50/50 border border-emerald-100 rounded-xl px-2.5 py-1 text-right shadow-3xs">
+                      <div className="flex items-center space-x-1.5 space-x-reverse">
+                        <span className="text-[9px] font-mono text-emerald-800">{Math.round(rotY)}°</span>
+                        <span className="text-slate-500">دوران:</span>
+                        <input 
+                          type="range" 
+                          min="-45" 
+                          max="45" 
+                          value={rotY} 
+                          onChange={(e) => setRotY(Number(e.target.value))}
+                          className="w-16 accent-emerald-600 bg-slate-250 h-1 rounded-full cursor-pointer"
+                        />
+                      </div>
+                      <div className="flex items-center space-x-1.5 space-x-reverse">
+                        <span className="text-[9px] font-mono text-emerald-800">{Math.round(rotX)}°</span>
+                        <span className="text-slate-500">إمالة:</span>
+                        <input 
+                          type="range" 
+                          min="-25" 
+                          max="25" 
+                          value={rotX} 
+                          onChange={(e) => setRotX(Number(e.target.value))}
+                          className="w-16 accent-emerald-600 bg-slate-250 h-1 rounded-full cursor-pointer"
+                        />
+                      </div>
+                      <button 
+                        onClick={() => { setRotX(12); setRotY(-15); }}
+                        className="bg-white hover:bg-slate-100 text-slate-650 border border-slate-200 rounded px-1.5 py-0.5 text-[8px] font-black transition-all"
+                      >
+                        إعادة تعيين
+                      </button>
+                      <span className="text-[8px] text-emerald-700 bg-emerald-100 px-1 py-0.2 rounded font-black hidden md:inline">اسحب الماوس للتوجيه المباشر 🖱️</span>
+                    </div>
+                  ) : (
+                    <h4 className="text-xs font-bold text-slate-500">مخرجات المختبر التفاعلي</h4>
+                  )}
                 </div>
 
                 {canvasElement}
@@ -2252,6 +2563,190 @@ export default function VirtualLab({ initialLabId, progress, onUpdateProgress, i
               </div>
             </div>
           </div>
+          </>
+          ) : (
+            (() => {
+              const activeLesson = LAB_LESSONS[selectedLabId];
+              if (!activeLesson) return null;
+              return (
+                <div className="space-y-6 text-right animate-fadeIn">
+                  {/* Scientific Concept Section */}
+                  <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4 text-right">
+                    <div className="flex items-center space-x-2 space-x-reverse text-emerald-600">
+                      <BookOpen className="w-5 h-5 shrink-0 ml-1.5" />
+                      <h4 className="text-sm font-black text-slate-800">المفهوم العلمي والأساس النظري للدرس</h4>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed font-semibold bg-slate-50 p-4 rounded-xl border border-slate-100">
+                      {activeLesson.concept}
+                    </p>
+                  </div>
+
+                  {/* Variables and Optimal value split */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-right">
+                    {/* Variable Explanations */}
+                    <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-3.5 text-right">
+                      <h5 className="text-xs font-extrabold text-slate-800">أثر المتغيرات والعوامل الفيزيولوجية:</h5>
+                      <div className="space-y-3">
+                        {activeLesson.variablesExplanation.map((v, i) => (
+                          <div key={i} className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 flex items-start space-x-2 space-x-reverse text-right">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0 ml-1.5" />
+                            <div className="text-xs text-right">
+                              <span className="font-extrabold text-emerald-700 block mb-0.5">{v.name}</span>
+                              <span className="text-slate-500 font-medium leading-relaxed">{v.effect}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Optimal & Real life */}
+                    <div className="space-y-6 text-right">
+                      <div className="bg-amber-50/40 border border-amber-200/60 rounded-2xl p-5 space-y-2.5 text-right">
+                        <div className="flex items-center space-x-2 space-x-reverse text-amber-700 text-right">
+                          <Info className="w-4 h-4 shrink-0 ml-1.5" />
+                          <h5 className="text-xs font-extrabold">القيم المثلى والشروط العلمية:</h5>
+                        </div>
+                        <p className="text-xs text-amber-850 leading-relaxed font-semibold">
+                          {activeLesson.keyOptimal}
+                        </p>
+                      </div>
+
+                      <div className="bg-sky-50/30 border border-sky-200/50 rounded-2xl p-5 space-y-2.5 text-right">
+                        <div className="flex items-center space-x-2 space-x-reverse text-sky-700 text-right">
+                          <Layers className="w-4 h-4 shrink-0 ml-1.5" />
+                          <h5 className="text-xs font-extrabold">تطبيقات حياتية وطبية معاصرة:</h5>
+                        </div>
+                        <p className="text-xs text-sky-850 leading-relaxed font-semibold">
+                          {activeLesson.realLifeApp}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Interactive Evaluation Quiz */}
+                  <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-5 text-right">
+                    <div className="border-b border-slate-100 pb-3 flex items-center justify-between text-right">
+                      <span className="text-[10px] font-extrabold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-150">تقييم سريع للفهم</span>
+                      <h4 className="text-sm font-black text-slate-800">اختبر فهمك للدرس والتجربة (تفاعلي)</h4>
+                    </div>
+
+                    <div className="space-y-6 text-right">
+                      {activeLesson.quiz.map((q, idx) => {
+                        const isSubmitted = submittedQuestions[q.id];
+                        const selectedIdx = selectedAnswers[q.id];
+                        const isCorrect = selectedIdx === q.correctAnswerIdx;
+
+                        return (
+                          <div key={q.id} className="bg-slate-50/50 rounded-2xl p-5 border border-slate-150/60 space-y-4 text-right">
+                            <div className="flex items-start space-x-2 space-x-reverse text-right">
+                              <span className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-black ml-2.5 shrink-0">
+                                {idx + 1}
+                              </span>
+                              <p className="text-xs font-extrabold text-slate-800 leading-relaxed text-right">{q.question}</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-2 text-right">
+                              {q.options.map((opt, optIdx) => {
+                                let btnStyle = 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700';
+                                
+                                if (selectedIdx === optIdx) {
+                                  btnStyle = 'bg-emerald-50 border-emerald-400 text-emerald-800 ring-2 ring-emerald-55';
+                                }
+
+                                if (isSubmitted) {
+                                  if (optIdx === q.correctAnswerIdx) {
+                                    btnStyle = 'bg-green-100 border-green-500 text-green-900 font-bold';
+                                  } else if (selectedIdx === optIdx) {
+                                    btnStyle = 'bg-rose-100 border-rose-400 text-rose-900';
+                                  } else {
+                                    btnStyle = 'bg-white border-slate-150 text-slate-400 cursor-not-allowed opacity-60';
+                                  }
+                                }
+
+                                return (
+                                  <button
+                                    key={optIdx}
+                                    disabled={isSubmitted}
+                                    onClick={() => setSelectedAnswers(prev => ({ ...prev, [q.id]: optIdx }))}
+                                    className={`w-full text-right p-3 rounded-xl border text-xs font-semibold transition-all flex items-center justify-between ${btnStyle}`}
+                                  >
+                                    <span>{opt}</span>
+                                    {isSubmitted && optIdx === q.correctAnswerIdx && (
+                                      <span className="bg-green-200 text-green-800 text-[9px] font-black px-1.5 py-0.5 rounded-md">✓ إجابة صحيحة</span>
+                                    )}
+                                    {isSubmitted && selectedIdx === optIdx && optIdx !== q.correctAnswerIdx && (
+                                      <span className="bg-rose-200 text-rose-800 text-[9px] font-black px-1.5 py-0.5 rounded-md">✗ إجابة خاطئة</span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {/* Action buttons & feedback */}
+                            <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-200/40 text-right">
+                              {!isSubmitted ? (
+                                <button
+                                  disabled={selectedIdx === undefined}
+                                  onClick={() => setSubmittedQuestions(prev => ({ ...prev, [q.id]: true }))}
+                                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                                    selectedIdx !== undefined
+                                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                  }`}
+                                >
+                                  التحقق من الإجابة
+                                </button>
+                              ) : (
+                                <div className="flex items-center space-x-2 space-x-reverse text-right">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedAnswers(prev => {
+                                        const updated = { ...prev };
+                                        delete updated[q.id];
+                                        return updated;
+                                      });
+                                      setSubmittedQuestions(prev => {
+                                        const updated = { ...prev };
+                                        delete updated[q.id];
+                                        return updated;
+                                      });
+                                    }}
+                                    className="text-[10px] font-extrabold text-slate-500 hover:text-slate-700 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-all"
+                                  >
+                                    إعادة المحاولة
+                                  </button>
+                                  {isCorrect ? (
+                                    <span className="text-xs font-black text-green-600 flex items-center gap-1">
+                                      <span>أحسنت! فهم ممتاز ومتقن للدرس.</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs font-black text-amber-600 flex items-center gap-1">
+                                      <span>حاول مجدداً لتثبيت المعلومة المنهجية.</span>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Educational Explanation Box */}
+                            {isSubmitted && (
+                              <div className="bg-sky-50/50 p-4 rounded-xl border border-sky-100 flex items-start space-x-2 space-x-reverse text-right animate-slideUp">
+                                <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5 ml-2" />
+                                <div className="text-xs leading-relaxed text-right">
+                                  <strong className="text-sky-850 block mb-1 font-extrabold text-right">التفسير التعليمي المنهجي:</strong>
+                                  <span className="text-slate-650 font-semibold text-right">{q.explanation}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()
+          )}
         </div>
       </div>
     </div>

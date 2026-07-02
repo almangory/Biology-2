@@ -71,6 +71,9 @@ export default function App() {
   // Toast Notification alerts
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Daily tip collapse state
+  const [isDailyTipExpanded, setIsDailyTipExpanded] = useState(false);
+
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
     window.history.pushState({ tab: tabId }, '');
@@ -488,12 +491,39 @@ export default function App() {
                 </div>
               </div>
 
-              {/* نصيحة اليوم الأكاديمية */}
-              <div className={`rounded-xl p-3 border ${isDarkMode ? 'bg-[#21211e] border-[#2e2e2a]' : 'bg-[#fdfbf7] border-[#eaddca]'}`}>
-                <p className={`text-[10px] leading-relaxed ${isDarkMode ? 'text-[#baa896]' : 'text-[#7c6a59]'} font-medium`}>
-                  💡 <strong>نصيحة اليوم للتعلم العميق:</strong>
-                  الدراسة والتركيز لمدة 35 دقيقة متبوعة بـ 5 دقائق استراحة هادئة تزيد من تجميع الأنسجة والمفاهيم فسيولوجياً وتثبيت الحفظ تلقائياً.
-                </p>
+              {/* نصيحة اليوم الأكاديمية - مخفية وتظهر بالضغط بطريقة انسيابية */}
+              <div className={`rounded-xl border transition-all duration-300 ${isDarkMode ? 'bg-[#21211e] border-[#2e2e2a]' : 'bg-[#fdfbf7] border-[#eaddca]'}`}>
+                <button
+                  onClick={() => setIsDailyTipExpanded(!isDailyTipExpanded)}
+                  className="w-full flex items-center justify-between p-3 text-right focus:outline-none"
+                >
+                  <div className="flex items-center space-x-2 space-x-reverse">
+                    <span className="text-[10px] font-black text-amber-500">💡 نصيحة اليوم للتعلم العميق</span>
+                  </div>
+                  <motion.span
+                    animate={{ rotate: isDailyTipExpanded ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                    className={`text-[9px] font-bold ${isDarkMode ? 'text-[#baa896]' : 'text-[#7c6a59]'}`}
+                  >
+                    ▼
+                  </motion.span>
+                </button>
+                
+                <AnimatePresence initial={false}>
+                  {isDailyTipExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.3, ease: 'easeInOut' }}
+                      className="overflow-hidden border-t border-[#f6f1e5] dark:border-[#2e2e2a]"
+                    >
+                      <p className={`p-3 text-[10px] leading-relaxed ${isDarkMode ? 'text-[#baa896]' : 'text-[#7c6a59]'} font-semibold`}>
+                        الدراسة والتركيز لمدة 35 دقيقة متبوعة بـ 5 دقائق استراحة هادئة تزيد من تجميع الأنسجة والمفاهيم فسيولوجياً وتثبيت الحفظ تلقائياً.
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           </aside>
